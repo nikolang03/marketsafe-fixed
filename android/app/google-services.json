@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "744810618140",
+    "project_id": "marketsafe-e57cf",
+    "storage_bucket": "marketsafe-e57cf.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:744810618140:android:21734dc6e84b9eea57aed9",
+        "android_client_info": {
+          "package_name": "com.ms.marketsafe"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBjSEtJ3f3FXdCrGj6BgrWkW-7_EID2JXk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
