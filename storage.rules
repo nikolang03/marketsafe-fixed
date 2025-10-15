@@ -1,0 +1,11 @@
+rules_version = '2';
+
+// Temporary permissive rules for testing Firebase Storage uploads
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Allow all access for testing (TEMPORARY - NOT FOR PRODUCTION)
+    match /{allPaths=**} {
+      allow read, write: if true;
+    }
+  }
+}

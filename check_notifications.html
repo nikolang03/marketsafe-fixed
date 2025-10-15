@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Check Notifications in Database</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .notification { margin: 10px 0; padding: 10px; border: 1px solid #ccc; }
+        .success { color: green; }
+        .error { color: red; }
+        .info { color: blue; }
+    </style>
+</head>
+<body>
+    <h1>Check Notifications in Database</h1>
+    
+    <div>
+        <button onclick="checkNotifications()">Check All Notifications</button>
+        <button onclick="checkUserNotifications()">Check User Notifications</button>
+        <div id="result"></div>
+    </div>
+
+    <script>
+        // Firebase REST API configuration
+        const FIREBASE_CONFIG = {
+            projectId: 'marketsafe-e57cf',
+            databaseId: 'marketsafe',
+            apiKey: 'AIzaSyAa-268Fx-XfJTsJLGznwcztd82r2vdf3Q'
+        };
+
+        const FIREBASE_REST_BASE = `https://firestore.googleapis.com/v1/projects/${FIREBASE_CONFIG.projectId}/databases/${FIREBASE_CONFIG.databaseId}/documents`;
+
+        async function checkNotifications() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '<p class="info">Checking all notifications...</p>';
+
+            try {
+                console.log('🔍 Checking all notifications...');
+                
+                const response = await fetch(`${FIREBASE_REST_BASE}/notifications?key=${FIREBASE_CONFIG.apiKey}`);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('🔍 All notifications:', data);
+                    
+                    let html = `<h3>Found ${data.documents?.length || 0} notifications:</h3>`;
+                    
+                    if (data.documents && data.documents.length > 0) {
+                        data.documents.forEach((doc, index) => {
+                            const fields = doc.fields || {};
+                            html += `
+                                <div class="notification">
+                                    <strong>Notification ${index + 1}:</strong><br>
+                                    ID: ${fields.id?.stringValue || 'N/A'}<br>
+                                    User ID: ${fields.userId?.stringValue || 'N/A'}<br>
+                                    Product ID: ${fields.productId?.stringValue || 'N/A'}<br>
+                                    Title: ${fields.title?.stringValue || 'N/A'}<br>
+                                    Status: ${fields.status?.stringValue || 'N/A'}<br>
+                                    Created: ${fields.createdAt?.timestampValue || 'N/A'}
+                                </div>
+                            `;
+                        });
+                    } else {
+                        html += '<p class="error">No notifications found in database</p>';
+                    }
+                    
+                    resultDiv.innerHTML = html;
+                } else {
+                    const errorText = await response.text();
+                    console.error('🔍 Error:', errorText);
+                    resultDiv.innerHTML = `<p class="error">❌ Error: ${response.status} - ${errorText}</p>`;
+                }
+
+            } catch (error) {
+                console.error('🔍 Error:', error);
+                resultDiv.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+            }
+        }
+
+        async function checkUserNotifications() {
+            const resultDiv = document.getElementById('result');
+            const userId = prompt('Enter user ID to check notifications for:');
+            
+            if (!userId) {
+                resultDiv.innerHTML = '<p class="error">No user ID provided</p>';
+                return;
+            }
+
+            resultDiv.innerHTML = '<p class="info">Checking user notifications...</p>';
+
+            try {
+                console.log('🔍 Checking notifications for user:', userId);
+                
+                const response = await fetch(`${FIREBASE_REST_BASE}/notifications?key=${FIREBASE_CONFIG.apiKey}&where=userId==${userId}`);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('🔍 User notifications:', data);
+                    
+                    let html = `<h3>Found ${data.documents?.length || 0} notifications for user ${userId}:</h3>`;
+                    
+                    if (data.documents && data.documents.length > 0) {
+                        data.documents.forEach((doc, index) => {
+                            const fields = doc.fields || {};
+                            html += `
+                                <div class="notification">
+                                    <strong>Notification ${index + 1}:</strong><br>
+                                    ID: ${fields.id?.stringValue || 'N/A'}<br>
+                                    User ID: ${fields.userId?.stringValue || 'N/A'}<br>
+                                    Product ID: ${fields.productId?.stringValue || 'N/A'}<br>
+                                    Title: ${fields.title?.stringValue || 'N/A'}<br>
+                                    Status: ${fields.status?.stringValue || 'N/A'}<br>
+                                    Created: ${fields.createdAt?.timestampValue || 'N/A'}
+                                </div>
+                            `;
+                        });
+                    } else {
+                        html += `<p class="error">No notifications found for user ${userId}</p>`;
+                    }
+                    
+                    resultDiv.innerHTML = html;
+                } else {
+                    const errorText = await response.text();
+                    console.error('🔍 Error:', errorText);
+                    resultDiv.innerHTML = `<p class="error">❌ Error: ${response.status} - ${errorText}</p>`;
+                }
+
+            } catch (error) {
+                console.error('🔍 Error:', error);
+                resultDiv.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+            }
+        }
+    </script>
+</body>
+</html>

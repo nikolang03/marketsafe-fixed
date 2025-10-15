@@ -1,0 +1,30 @@
+{
+  "rules": {
+    "users": {
+      "$userId": {
+        ".read": "auth != null && (auth.uid == $userId || root.child('adminUsers').child(auth.uid).child('permissions').child('canViewUserData').val() == true)",
+        ".write": "auth != null && auth.uid == $userId",
+        "verificationStatus": {
+          ".write": "auth != null && root.child('adminUsers').child(auth.uid).child('permissions').child('canApproveUsers').val() == true"
+        }
+      }
+    },
+    "faceData": {
+      "$faceDataId": {
+        ".read": "auth != null && (root.child('faceData').child($faceDataId).child('userId').val() == auth.uid || root.child('adminUsers').child(auth.uid).child('permissions').child('canViewUserData').val() == true)",
+        ".write": "auth != null && root.child('faceData').child($faceDataId).child('userId').val() == auth.uid"
+      }
+    },
+    "adminUsers": {
+      "$adminId": {
+        ".read": "auth != null && auth.uid == $adminId",
+        ".write": "auth != null && auth.uid == $adminId && root.child('adminUsers').child(auth.uid).child('role').val() == 'super_admin'"
+      }
+    },
+    "verificationQueue": {
+      ".read": "auth != null && root.child('adminUsers').child(auth.uid).child('permissions').child('canViewUserData').val() == true",
+      ".write": "auth != null && root.child('adminUsers').child(auth.uid).child('permissions').child('canApproveUsers').val() == true"
+    }
+  }
+}
+

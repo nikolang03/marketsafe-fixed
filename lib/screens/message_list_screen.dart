@@ -35,22 +35,6 @@ class _MessageListScreenState extends State<MessageListScreen> {
               ),
             ),
 
-            // Search bar
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const TextField(
-                decoration: InputDecoration(
-                  hintText: "Search",
-                  border: InputBorder.none,
-                  icon: Icon(Icons.search),
-                ),
-              ),
-            ),
 
             // Only 1 User
             ListTile(

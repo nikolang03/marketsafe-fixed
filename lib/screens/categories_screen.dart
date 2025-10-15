@@ -6,7 +6,6 @@ import 'categories/menswear_screen.dart';
 import 'categories/womenswear_screen.dart';
 import 'categories/vehicle_screen.dart';
 
-
 class CategoriesScreen extends StatefulWidget {
   const CategoriesScreen({super.key});
 
@@ -15,7 +14,6 @@ class CategoriesScreen extends StatefulWidget {
 }
 
 class _CategoriesScreenState extends State<CategoriesScreen> {
-  int _selectedIndex = 0; // 👈 track active bottom nav button
 
   final List<Map<String, String>> categories = [
     {"title": "ACCESSORIES", "image": "assets/logo.png"},
@@ -26,45 +24,32 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
     {"title": "VEHICLE", "image": "assets/logo.png"},
   ];
 
-
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-        body: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Colors.black, Color(0xFF2B0000)],
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-            ),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.black, Color(0xFF2B0000)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
           ),
-      child: SafeArea(
+        ),
         child: Column(
           children: [
             // 🔝 Top Bar
             Container(
               color: const Color(0xFF5C0000),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: EdgeInsets.only(
+                left: 12,
+                right: 12,
+                top: MediaQuery.of(context).padding.top + 8,
+                bottom: 8,
+              ),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Image.asset("assets/logo.png", height: 30),
-                  Material(
-                    color: Colors.transparent,
-                    shape: const CircleBorder(),
-                    child: InkWell(
-                      customBorder: const CircleBorder(),
-                      onTap: () {
-                        // TODO: Navigate to notifications later
-                      },
-                      child: const Padding(
-                        padding: EdgeInsets.all(8.0),
-                        child: Icon(Icons.notifications_none,
-                            color: Colors.white, size: 25),
-                      ),
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -84,7 +69,12 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
             // 📌 Categories List
             Expanded(
               child: ListView.builder(
-                padding: const EdgeInsets.all(10),
+                padding: EdgeInsets.only(
+                  left: 10,
+                  right: 10,
+                  top: 10,
+                  bottom: MediaQuery.of(context).padding.bottom + 70 + 10,
+                ),
                 itemCount: categories.length,
                 itemBuilder: (context, index) {
                   return InkWell(
@@ -92,10 +82,9 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                       switch (categories[index]["title"]) {
                         case "ACCESSORIES":
                           Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) => const AccessoriesScreen())
-                          );
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) => const AccessoriesScreen()));
                           break;
                         case "ELECTRONICS":
                           Navigator.push(
@@ -166,8 +155,6 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
           ],
         ),
       ),
-        ),
     );
-    // 🔽 Bottom Nav
   }
-  }
+}

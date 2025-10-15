@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Notification Creation</title>
+</head>
+<body>
+    <h1>Test Notification Creation</h1>
+    <button onclick="createTestNotification()">Create Test Notification</button>
+    <div id="result"></div>
+
+    <script>
+        // Firebase configuration
+        const firebaseConfig = {
+            projectId: 'marketsafe-e57cf',
+            databaseId: 'marketsafe',
+            apiKey: 'AIzaSyAa-268Fx-XfJTsJLGznwcztd82r2vdf3Q'
+        };
+
+        const FIREBASE_REST_BASE = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/${firebaseConfig.databaseId}/documents`;
+
+        async function createTestNotification() {
+            try {
+                const resultDiv = document.getElementById('result');
+                resultDiv.innerHTML = 'Creating notification...';
+
+                // Use the same user ID as the app
+                const userId = 'user_1760401522367_cunanankonifers';
+                console.log('Using user ID:', userId);
+
+                const notificationId = `notification_${Date.now()}_test`;
+                const notification = {
+                    id: notificationId,
+                    userId: userId,
+                    productId: 'test_product_123',
+                    productTitle: 'Test Product',
+                    type: 'product_status',
+                    status: 'approved',
+                    isRead: false,
+                    createdAt: new Date().toISOString(),
+                    title: 'Product Approved! 🎉',
+                    message: 'Great news! Your product "Test Product" has been approved and is now live!'
+                };
+
+                console.log('Creating notification with data:', notification);
+
+                // Save to Firestore using REST API (same format as web admin)
+                const response = await fetch(`${FIREBASE_REST_BASE}/notifications/${notificationId}?key=${firebaseConfig.apiKey}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        fields: {
+                            id: { stringValue: notification.id },
+                            userId: { stringValue: notification.userId },
+                            productId: { stringValue: notification.productId },
+                            productTitle: { stringValue: notification.productTitle },
+                            type: { stringValue: notification.type },
+                            status: { stringValue: notification.status },
+                            isRead: { booleanValue: notification.isRead },
+                            createdAt: { timestampValue: notification.createdAt },
+                            title: { stringValue: notification.title },
+                            message: { stringValue: notification.message }
+                        }
+                    })
+                });
+
+                console.log('REST API Response status:', response.status);
+                const responseText = await response.text();
+                console.log('REST API Response body:', responseText);
+                
+                // Check if the notification was actually created
+                console.log('Checking if notification was created...');
+                const checkResponse = await fetch(`${FIREBASE_REST_BASE}/notifications/${notificationId}?key=${firebaseConfig.apiKey}`);
+                console.log('Check response status:', checkResponse.status);
+                if (checkResponse.ok) {
+                    const checkData = await checkResponse.json();
+                    console.log('Notification exists in database:', checkData);
+                } else {
+                    console.log('Notification does not exist in database');
+                }
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+
+                resultDiv.innerHTML = `
+                    <h3>✅ Notification Created Successfully!</h3>
+                    <p><strong>Document ID:</strong> ${notificationId}</p>
+                    <p><strong>User ID:</strong> ${userId}</p>
+                    <p><strong>Status:</strong> ${notification.status}</p>
+                    <p><strong>Message:</strong> ${notification.message}</p>
+                    <p><strong>Database:</strong> ${firebaseConfig.databaseId}</p>
+                `;
+            } catch (error) {
+                document.getElementById('result').innerHTML = `
+                    <h3>❌ Error Creating Notification</h3>
+                    <p><strong>Error:</strong> ${error.message}</p>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,49 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow read/write access to OTPs collection for all users (no auth required for OTPs)
+    match /otps/{email} {
+      allow read, write: if true;
+    }
+    
+    // Allow read/write access to users collection for all users (temporary for testing)
+    match /users/{userId} {
+      allow read, write: if true; // Allow all access for testing
+    }
+    
+    // Allow read/write access to faceMetrics collection for all users (temporary for testing)
+    match /faceMetrics/{faceDataId} {
+      allow read, write: if true; // Allow all access for testing
+    }
+    
+    // Allow read/write access to face_registry collection for face uniqueness checking
+    match /face_registry/{faceRegistryId} {
+      allow read, write: if true; // Allow all access for testing
+    }
+    
+    // Allow read/write access to verificationQueue for admin operations
+    match /verificationQueue/{queueId} {
+      allow read, write: if true; // Allow all access for admin operations
+    }
+    
+    // Allow read/write access to products collection for all users
+    match /products/{productId} {
+      allow read, write: if true; // Allow all access for testing
+    }
+    
+    // Allow read/write access to categories collection for all users
+    match /categories/{categoryId} {
+      allow read, write: if true; // Allow all access for testing
+    }
+    
+    // Allow users to read and write their own notifications
+    match /notifications/{notificationId} {
+      allow read, write: if true; // Allow all access for testing
+    }
+    
+    // Default deny all other access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

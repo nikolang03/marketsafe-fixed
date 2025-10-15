@@ -1,0 +1,88 @@
+{
+  "users": {
+    "user_id_1": {
+      "personalInfo": {
+        "email": "user@example.com",
+        "phoneNumber": "+639123456789",
+        "fullName": "John Doe",
+        "address": "123 Main St, City",
+        "dateOfBirth": "1990-01-01",
+        "gender": "male"
+      },
+      "verificationStatus": {
+        "status": "pending",
+        "submittedAt": "2024-01-01T10:00:00Z",
+        "reviewedAt": null,
+        "reviewedBy": null,
+        "rejectionReason": null,
+        "notes": ""
+      },
+      "faceVerification": {
+        "faceDataId": "face_data_id_1",
+        "blinkCompleted": true,
+        "headMovementCompleted": true,
+        "closenessCompleted": true,
+        "completedAt": "2024-01-01T10:05:00Z"
+      },
+      "accountInfo": {
+        "createdAt": "2024-01-01T10:00:00Z",
+        "lastLoginAt": "2024-01-01T10:30:00Z",
+        "isActive": true,
+        "lockoutCount": 0,
+        "lastLockoutAt": null
+      }
+    }
+  },
+  "faceData": {
+    "face_data_id_1": {
+      "userId": "user_id_1",
+      "faceMetrics": {
+        "eyeDistance": 45.2,
+        "noseWidth": 12.8,
+        "mouthWidth": 28.5,
+        "faceWidth": 85.3,
+        "faceHeight": 110.7
+      },
+      "verificationSteps": {
+        "blinkCompleted": {
+          "timestamp": "2024-01-01T10:02:00Z",
+          "blinkCount": 3,
+          "completionTime": "5.2s"
+        },
+        "headMovementCompleted": {
+          "timestamp": "2024-01-01T10:03:00Z",
+          "movementAccuracy": 95.8
+        },
+        "closenessCompleted": {
+          "timestamp": "2024-01-01T10:04:00Z",
+          "distanceAccuracy": 92.3
+        }
+      },
+      "createdAt": "2024-01-01T10:02:00Z"
+    }
+  },
+  "adminUsers": {
+    "admin_id_1": {
+      "email": "admin@marketsafe.com",
+      "name": "Admin User",
+      "role": "super_admin",
+      "permissions": {
+        "canApproveUsers": true,
+        "canRejectUsers": true,
+        "canViewUserData": true,
+        "canDeleteUsers": false
+      },
+      "createdAt": "2024-01-01T00:00:00Z",
+      "lastLoginAt": "2024-01-01T09:00:00Z"
+    }
+  },
+  "verificationQueue": {
+    "queue_item_1": {
+      "userId": "user_id_1",
+      "submittedAt": "2024-01-01T10:00:00Z",
+      "priority": "normal",
+      "status": "pending"
+    }
+  }
+}
+

@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Admin Notification Creation</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+        .success { color: green; }
+        .error { color: red; }
+        .info { color: blue; }
+    </style>
+</head>
+<body>
+    <h1>Test Admin Notification Creation</h1>
+    
+    <div class="test-section">
+        <h3>Test Notification Creation</h3>
+        <p>This will test if the admin can create notifications directly.</p>
+        <button onclick="testNotificationCreation()">Test Create Notification</button>
+        <div id="testResult"></div>
+    </div>
+
+    <script>
+        // Firebase REST API configuration
+        const FIREBASE_CONFIG = {
+            projectId: 'marketsafe-e57cf',
+            databaseId: 'marketsafe',
+            apiKey: 'AIzaSyAa-268Fx-XfJTsJLGznwcztd82r2vdf3Q'
+        };
+        
+        console.log('🔧 Firebase Config:', FIREBASE_CONFIG);
+
+        const FIREBASE_REST_BASE = `https://firestore.googleapis.com/v1/projects/${FIREBASE_CONFIG.projectId}/databases/${FIREBASE_CONFIG.databaseId}/documents`;
+
+        async function testNotificationCreation() {
+            const resultDiv = document.getElementById('testResult');
+            resultDiv.innerHTML = '<p class="info">Testing notification creation...</p>';
+
+            try {
+                console.log('🧪 Starting notification creation test...');
+                
+                // Test data
+                const testProductData = {
+                    fields: {
+                        sellerId: { stringValue: 'test_user_123' },
+                        title: { stringValue: 'Test Product' }
+                    }
+                };
+
+                // Create test notification
+                const notificationId = `test_notification_${Date.now()}`;
+                const notification = {
+                    id: notificationId,
+                    userId: 'test_user_123',
+                    productId: 'test_product_123',
+                    productTitle: 'Test Product',
+                    type: 'product_status',
+                    status: 'approved',
+                    isRead: false,
+                    createdAt: new Date().toISOString(),
+                    title: 'Product Approved',
+                    message: 'Your product "Test Product" has been approved!'
+                };
+                
+                console.log('🧪 Test notification data:', notification);
+                console.log('🧪 API URL:', `${FIREBASE_REST_BASE}/notifications/${notificationId}?key=${FIREBASE_CONFIG.apiKey}`);
+
+                // Save to Firestore
+                const response = await fetch(`${FIREBASE_REST_BASE}/notifications/${notificationId}?key=${FIREBASE_CONFIG.apiKey}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        fields: {
+                            id: { stringValue: notification.id },
+                            userId: { stringValue: notification.userId },
+                            productId: { stringValue: notification.productId },
+                            productTitle: { stringValue: notification.productTitle },
+                            type: { stringValue: notification.type },
+                            status: { stringValue: notification.status },
+                            isRead: { booleanValue: notification.isRead },
+                            createdAt: { timestampValue: notification.createdAt },
+                            title: { stringValue: notification.title },
+                            message: { stringValue: notification.message }
+                        }
+                    })
+                });
+
+                console.log('🧪 Response status:', response.status);
+                console.log('🧪 Response headers:', response.headers);
+                
+                if (response.ok) {
+                    const responseData = await response.json();
+                    console.log('🧪 Response data:', responseData);
+                    resultDiv.innerHTML = '<p class="success">✅ Test notification created successfully!</p>';
+                } else {
+                    const errorText = await response.text();
+                    console.error('🧪 Error response:', errorText);
+                    resultDiv.innerHTML = `<p class="error">❌ Failed to create notification: ${response.status} - ${errorText}</p>`;
+                }
+
+            } catch (error) {
+                resultDiv.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+            }
+        }
+    </script>
+</body>
+</html>

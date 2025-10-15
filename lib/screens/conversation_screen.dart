@@ -126,7 +126,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.1),
+                          color: Colors.white.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(25),
                           border: Border.all(color: Colors.white24),
                         ),

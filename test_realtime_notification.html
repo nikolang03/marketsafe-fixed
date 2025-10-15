@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Real-time Notification</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .success { color: green; }
+        .error { color: red; }
+        .info { color: blue; }
+        button { padding: 10px 20px; margin: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Test Real-time Notification Creation</h1>
+    <p>This page will create a test notification that should appear immediately in your Flutter app.</p>
+    
+    <div>
+        <button onclick="createTestNotification()">Create Test Notification</button>
+        <button onclick="checkNotifications()">Check All Notifications</button>
+    </div>
+    
+    <div id="result"></div>
+    <div id="notifications"></div>
+
+    <script>
+        // Firebase REST API configuration
+        const FIREBASE_CONFIG = {
+            projectId: 'marketsafe-e57cf',
+            databaseId: 'marketsafe',
+            apiKey: 'AIzaSyAa-268Fx-XfJTsJLGznwcztd82r2vdf3Q'
+        };
+
+        const FIREBASE_REST_BASE = `https://firestore.googleapis.com/v1/projects/${FIREBASE_CONFIG.projectId}/databases/${FIREBASE_CONFIG.databaseId}/documents`;
+
+        async function createTestNotification() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '<p class="info">Creating test notification...</p>';
+
+            try {
+                const userId = 'user_1760401522367_cunanankonifers'; // Your user ID
+                const notificationId = `realtime_test_${Date.now()}`;
+                const now = new Date().toISOString();
+                
+                const notification = {
+                    id: notificationId,
+                    userId: userId,
+                    productId: 'test_realtime_product',
+                    productTitle: 'Real-time Test Product',
+                    type: 'product_status',
+                    status: 'approved',
+                    isRead: false,
+                    createdAt: now,
+                    title: 'Real-time Test Notification',
+                    message: `This is a real-time test notification created at ${new Date().toLocaleString()}`
+                };
+
+                console.log('🧪 Creating real-time test notification:', notification);
+
+                const response = await fetch(`${FIREBASE_REST_BASE}/notifications/${notificationId}?key=${FIREBASE_CONFIG.apiKey}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        fields: {
+                            id: { stringValue: notification.id },
+                            userId: { stringValue: notification.userId },
+                            productId: { stringValue: notification.productId },
+                            productTitle: { stringValue: notification.productTitle },
+                            type: { stringValue: notification.type },
+                            status: { stringValue: notification.status },
+                            isRead: { booleanValue: notification.isRead },
+                            createdAt: { timestampValue: notification.createdAt },
+                            title: { stringValue: notification.title },
+                            message: { stringValue: notification.message }
+                        }
+                    })
+                });
+
+                if (response.ok) {
+                    resultDiv.innerHTML = '<p class="success">✅ Real-time test notification created! Check your Flutter app - it should appear immediately.</p>';
+                    console.log('✅ Real-time test notification created successfully');
+                } else {
+                    const errorText = await response.text();
+                    resultDiv.innerHTML = `<p class="error">❌ Failed to create notification: ${response.status} - ${errorText}</p>`;
+                    console.error('❌ Error creating notification:', errorText);
+                }
+
+            } catch (error) {
+                resultDiv.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                console.error('❌ Error:', error);
+            }
+        }
+
+        async function checkNotifications() {
+            const notificationsDiv = document.getElementById('notifications');
+            notificationsDiv.innerHTML = '<p class="info">Loading notifications...</p>';
+
+            try {
+                const response = await fetch(`${FIREBASE_REST_BASE}/notifications?key=${FIREBASE_CONFIG.apiKey}`);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('📋 All notifications:', data);
+                    
+                    if (data.documents && data.documents.length > 0) {
+                        let html = `<h3>Found ${data.documents.length} notifications:</h3>`;
+                        
+                        data.documents.forEach((doc, index) => {
+                            const fields = doc.fields || {};
+                            const notificationId = doc.name.split('/').pop();
+                            const userId = fields.userId?.stringValue || 'N/A';
+                            const title = fields.title?.stringValue || 'N/A';
+                            const status = fields.status?.stringValue || 'N/A';
+                            const createdAt = fields.createdAt?.timestampValue || 'N/A';
+                            const isRead = fields.isRead?.booleanValue ?? 'N/A';
+                            
+                            html += `
+                                <div style="border: 1px solid #ccc; padding: 10px; margin: 5px 0;">
+                                    <strong>Notification ${index + 1}:</strong> ${title}<br>
+                                    <strong>ID:</strong> ${notificationId}<br>
+                                    <strong>User:</strong> ${userId}<br>
+                                    <strong>Status:</strong> ${status}<br>
+                                    <strong>Created:</strong> ${createdAt}<br>
+                                    <strong>Read:</strong> ${isRead}
+                                </div>
+                            `;
+                        });
+                        
+                        notificationsDiv.innerHTML = html;
+                    } else {
+                        notificationsDiv.innerHTML = '<p>No notifications found.</p>';
+                    }
+                } else {
+                    const errorText = await response.text();
+                    notificationsDiv.innerHTML = `<p class="error">❌ Error loading notifications: ${response.status} - ${errorText}</p>`;
+                }
+
+            } catch (error) {
+                notificationsDiv.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+                console.error('❌ Error loading notifications:', error);
+            }
+        }
+    </script>
+</body>
+</html>

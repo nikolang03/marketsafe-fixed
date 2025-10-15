@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Check Product Image URLs</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .product { margin: 10px 0; padding: 10px; border: 1px solid #ccc; }
+        .random-image { background-color: #ffebee; }
+        .firebase-image { background-color: #e8f5e8; }
+        .error { color: red; }
+        .success { color: green; }
+    </style>
+</head>
+<body>
+    <h1>Check Product Image URLs</h1>
+    
+    <div>
+        <button onclick="checkImageUrls()">Check All Product Images</button>
+        <div id="result"></div>
+    </div>
+
+    <script>
+        // Firebase REST API configuration
+        const FIREBASE_CONFIG = {
+            projectId: 'marketsafe-e57cf',
+            databaseId: 'marketsafe',
+            apiKey: 'AIzaSyAa-268Fx-XfJTsJLGznwcztd82r2vdf3Q'
+        };
+
+        const FIREBASE_REST_BASE = `https://firestore.googleapis.com/v1/projects/${FIREBASE_CONFIG.projectId}/databases/${FIREBASE_CONFIG.databaseId}/documents`;
+
+        async function checkImageUrls() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '<p>Checking product images...</p>';
+
+            try {
+                console.log('🔍 Checking product images...');
+                
+                const response = await fetch(`${FIREBASE_REST_BASE}/products?key=${FIREBASE_CONFIG.apiKey}`);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('🔍 Products:', data);
+                    
+                    let html = `<h3>Found ${data.documents?.length || 0} products:</h3>`;
+                    let randomImageCount = 0;
+                    let firebaseImageCount = 0;
+                    
+                    if (data.documents && data.documents.length > 0) {
+                        data.documents.forEach((doc, index) => {
+                            const fields = doc.fields || {};
+                            const imageUrls = fields.imageUrls?.arrayValue?.values || [];
+                            const imageUrl = fields.imageUrl?.stringValue || '';
+                            const title = fields.title?.stringValue || 'N/A';
+                            
+                            let hasRandomImage = false;
+                            let hasFirebaseImage = false;
+                            
+                            // Check single image URL
+                            if (imageUrl && imageUrl.includes('picsum.photos')) {
+                                hasRandomImage = true;
+                                randomImageCount++;
+                            } else if (imageUrl && imageUrl.includes('firebasestorage.googleapis.com')) {
+                                hasFirebaseImage = true;
+                                firebaseImageCount++;
+                            }
+                            
+                            // Check multiple image URLs
+                            imageUrls.forEach(img => {
+                                const url = img.stringValue || '';
+                                if (url.includes('picsum.photos')) {
+                                    hasRandomImage = true;
+                                    randomImageCount++;
+                                } else if (url.includes('firebasestorage.googleapis.com')) {
+                                    hasFirebaseImage = true;
+                                    firebaseImageCount++;
+                                }
+                            });
+                            
+                            const productClass = hasRandomImage ? 'random-image' : (hasFirebaseImage ? 'firebase-image' : '');
+                            
+                            html += `
+                                <div class="product ${productClass}">
+                                    <strong>Product ${index + 1}: ${title}</strong><br>
+                                    ID: ${doc.name.split('/').pop()}<br>
+                                    Single Image: ${imageUrl || 'None'}<br>
+                                    Multiple Images: ${imageUrls.length > 0 ? imageUrls.map(img => img.stringValue).join(', ') : 'None'}<br>
+                                    ${hasRandomImage ? '<span class="error">⚠️ Contains random placeholder images</span>' : ''}
+                                    ${hasFirebaseImage ? '<span class="success">✅ Contains Firebase images</span>' : ''}
+                                </div>
+                            `;
+                        });
+                        
+                        html += `<h3>Summary:</h3>`;
+                        html += `<p>Products with random images: ${randomImageCount}</p>`;
+                        html += `<p>Products with Firebase images: ${firebaseImageCount}</p>`;
+                    } else {
+                        html += '<p class="error">No products found in database</p>';
+                    }
+                    
+                    resultDiv.innerHTML = html;
+                } else {
+                    const errorText = await response.text();
+                    console.error('🔍 Error:', errorText);
+                    resultDiv.innerHTML = `<p class="error">❌ Error: ${response.status} - ${errorText}</p>`;
+                }
+
+            } catch (error) {
+                console.error('🔍 Error:', error);
+                resultDiv.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+            }
+        }
+    </script>
+</body>
+</html>

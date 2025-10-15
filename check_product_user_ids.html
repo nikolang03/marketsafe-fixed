@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Check Product User IDs</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .product { margin: 10px 0; padding: 10px; border: 1px solid #ccc; }
+        .success { color: green; }
+        .error { color: red; }
+        .info { color: blue; }
+    </style>
+</head>
+<body>
+    <h1>Check Product User IDs</h1>
+    
+    <div>
+        <button onclick="checkProducts()">Check All Products</button>
+        <div id="result"></div>
+    </div>
+
+    <script>
+        // Firebase REST API configuration
+        const FIREBASE_CONFIG = {
+            projectId: 'marketsafe-e57cf',
+            databaseId: 'marketsafe',
+            apiKey: 'AIzaSyAa-268Fx-XfJTsJLGznwcztd82r2vdf3Q'
+        };
+
+        const FIREBASE_REST_BASE = `https://firestore.googleapis.com/v1/projects/${FIREBASE_CONFIG.projectId}/databases/${FIREBASE_CONFIG.databaseId}/documents`;
+
+        async function checkProducts() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '<p class="info">Checking all products...</p>';
+
+            try {
+                console.log('🔍 Checking all products...');
+                
+                const response = await fetch(`${FIREBASE_REST_BASE}/products?key=${FIREBASE_CONFIG.apiKey}`);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('🔍 All products:', data);
+                    
+                    let html = `<h3>Found ${data.documents?.length || 0} products:</h3>`;
+                    
+                    if (data.documents && data.documents.length > 0) {
+                        data.documents.forEach((doc, index) => {
+                            const fields = doc.fields || {};
+                            const sellerId = fields.sellerId?.stringValue || 'N/A';
+                            const title = fields.title?.stringValue || 'N/A';
+                            const status = fields.moderationStatus?.stringValue || 'N/A';
+                            
+                            html += `
+                                <div class="product">
+                                    <strong>Product ${index + 1}:</strong><br>
+                                    ID: ${doc.name.split('/').pop()}<br>
+                                    Title: ${title}<br>
+                                    Seller ID: <strong>${sellerId}</strong><br>
+                                    Status: ${status}<br>
+                                    <button onclick="testNotificationForProduct('${doc.name.split('/').pop()}', '${sellerId}', '${title}')">Test Notification for This Product</button>
+                                </div>
+                            `;
+                        });
+                    } else {
+                        html += '<p class="error">No products found in database</p>';
+                    }
+                    
+                    resultDiv.innerHTML = html;
+                } else {
+                    const errorText = await response.text();
+                    console.error('🔍 Error:', errorText);
+                    resultDiv.innerHTML = `<p class="error">❌ Error: ${response.status} - ${errorText}</p>`;
+                }
+
+            } catch (error) {
+                console.error('🔍 Error:', error);
+                resultDiv.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+            }
+        }
+
+        async function testNotificationForProduct(productId, sellerId, productTitle) {
+            console.log('🧪 Testing notification for product:', productId, 'seller:', sellerId);
+            
+            try {
+                const notificationId = `test_${productId}_${Date.now()}`;
+                const notification = {
+                    id: notificationId,
+                    userId: sellerId,
+                    productId: productId,
+                    productTitle: productTitle,
+                    type: 'product_status',
+                    status: 'approved',
+                    isRead: false,
+                    createdAt: new Date().toISOString(),
+                    title: 'Product Approved! 🎉',
+                    message: `Your product "${productTitle}" has been approved!`
+                };
+                
+                console.log('🧪 Creating notification:', notification);
+                
+                const response = await fetch(`${FIREBASE_REST_BASE}/notifications/${notificationId}?key=${FIREBASE_CONFIG.apiKey}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        fields: {
+                            id: { stringValue: notification.id },
+                            userId: { stringValue: notification.userId },
+                            productId: { stringValue: notification.productId },
+                            productTitle: { stringValue: notification.productTitle },
+                            type: { stringValue: notification.type },
+                            status: { stringValue: notification.status },
+                            isRead: { booleanValue: notification.isRead },
+                            createdAt: { timestampValue: notification.createdAt },
+                            title: { stringValue: notification.title },
+                            message: { stringValue: notification.message }
+                        }
+                    })
+                });
+
+                if (response.ok) {
+                    console.log('✅ Notification created successfully');
+                    alert(`✅ Notification created for product "${productTitle}" with seller ID "${sellerId}"`);
+                } else {
+                    const errorText = await response.text();
+                    console.error('❌ Error:', errorText);
+                    alert(`❌ Failed to create notification: ${response.status} - ${errorText}`);
+                }
+
+            } catch (error) {
+                console.error('❌ Error:', error);
+                alert(`❌ Error: ${error.message}`);
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Notification for Your User ID</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+        .success { color: green; }
+        .error { color: red; }
+        .info { color: blue; }
+        input { padding: 8px; margin: 5px; width: 300px; }
+    </style>
+</head>
+<body>
+    <h1>Test Notification for Your User ID</h1>
+    
+    <div class="test-section">
+        <h3>Create Notification for Your User</h3>
+        <p>This will create a notification for your actual user ID: <strong>user_1760401522367_cunanankonifers</strong></p>
+        <button onclick="testUserNotification()">Create Notification for My User</button>
+        <div id="testResult"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>Custom User ID Test</h3>
+        <p>Or test with a custom user ID:</p>
+        <input type="text" id="customUserId" placeholder="Enter user ID" value="user_1760401522367_cunanankonifers">
+        <button onclick="testCustomUserNotification()">Create Notification for Custom User</button>
+        <div id="customResult"></div>
+    </div>
+
+    <script>
+        // Firebase REST API configuration
+        const FIREBASE_CONFIG = {
+            projectId: 'marketsafe-e57cf',
+            databaseId: 'marketsafe',
+            apiKey: 'AIzaSyAa-268Fx-XfJTsJLGznwcztd82r2vdf3Q'
+        };
+        
+        console.log('🔧 Firebase Config:', FIREBASE_CONFIG);
+
+        const FIREBASE_REST_BASE = `https://firestore.googleapis.com/v1/projects/${FIREBASE_CONFIG.projectId}/databases/${FIREBASE_CONFIG.databaseId}/documents`;
+
+        async function testUserNotification() {
+            const resultDiv = document.getElementById('testResult');
+            resultDiv.innerHTML = '<p class="info">Creating notification for your user...</p>';
+
+            try {
+                console.log('🧪 Creating notification for user: user_1760401522367_cunanankonifers');
+                
+                const userId = 'user_1760401522367_cunanankonifers';
+                const notificationId = `user_notification_${Date.now()}`;
+                const notification = {
+                    id: notificationId,
+                    userId: userId,
+                    productId: 'test_product_for_user',
+                    productTitle: 'Test Product for User',
+                    type: 'product_status',
+                    status: 'approved',
+                    isRead: false,
+                    createdAt: new Date().toISOString(),
+                    title: 'Product Approved! 🎉',
+                    message: 'Your product "Test Product for User" has been approved!'
+                };
+                
+                console.log('🧪 Notification data:', notification);
+                
+                const response = await fetch(`${FIREBASE_REST_BASE}/notifications/${notificationId}?key=${FIREBASE_CONFIG.apiKey}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        fields: {
+                            id: { stringValue: notification.id },
+                            userId: { stringValue: notification.userId },
+                            productId: { stringValue: notification.productId },
+                            productTitle: { stringValue: notification.productTitle },
+                            type: { stringValue: notification.type },
+                            status: { stringValue: notification.status },
+                            isRead: { booleanValue: notification.isRead },
+                            createdAt: { timestampValue: notification.createdAt },
+                            title: { stringValue: notification.title },
+                            message: { stringValue: notification.message }
+                        }
+                    })
+                });
+
+                console.log('🧪 Response status:', response.status);
+                
+                if (response.ok) {
+                    const responseData = await response.json();
+                    console.log('🧪 Response data:', responseData);
+                    resultDiv.innerHTML = '<p class="success">✅ Notification created successfully for your user! Check your Flutter app.</p>';
+                } else {
+                    const errorText = await response.text();
+                    console.error('🧪 Error response:', errorText);
+                    resultDiv.innerHTML = `<p class="error">❌ Failed to create notification: ${response.status} - ${errorText}</p>`;
+                }
+
+            } catch (error) {
+                console.error('🧪 Error:', error);
+                resultDiv.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+            }
+        }
+
+        async function testCustomUserNotification() {
+            const resultDiv = document.getElementById('customResult');
+            const userId = document.getElementById('customUserId').value.trim();
+            
+            if (!userId) {
+                resultDiv.innerHTML = '<p class="error">Please enter a user ID</p>';
+                return;
+            }
+
+            resultDiv.innerHTML = '<p class="info">Creating notification for custom user...</p>';
+
+            try {
+                console.log('🧪 Creating notification for user:', userId);
+                
+                const notificationId = `custom_notification_${Date.now()}`;
+                const notification = {
+                    id: notificationId,
+                    userId: userId,
+                    productId: 'test_product_custom',
+                    productTitle: 'Test Product Custom',
+                    type: 'product_status',
+                    status: 'approved',
+                    isRead: false,
+                    createdAt: new Date().toISOString(),
+                    title: 'Product Approved! 🎉',
+                    message: 'Your product "Test Product Custom" has been approved!'
+                };
+                
+                console.log('🧪 Notification data:', notification);
+                
+                const response = await fetch(`${FIREBASE_REST_BASE}/notifications/${notificationId}?key=${FIREBASE_CONFIG.apiKey}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        fields: {
+                            id: { stringValue: notification.id },
+                            userId: { stringValue: notification.userId },
+                            productId: { stringValue: notification.productId },
+                            productTitle: { stringValue: notification.productTitle },
+                            type: { stringValue: notification.type },
+                            status: { stringValue: notification.status },
+                            isRead: { booleanValue: notification.isRead },
+                            createdAt: { timestampValue: notification.createdAt },
+                            title: { stringValue: notification.title },
+                            message: { stringValue: notification.message }
+                        }
+                    })
+                });
+
+                console.log('🧪 Response status:', response.status);
+                
+                if (response.ok) {
+                    const responseData = await response.json();
+                    console.log('🧪 Response data:', responseData);
+                    resultDiv.innerHTML = '<p class="success">✅ Notification created successfully for custom user!</p>';
+                } else {
+                    const errorText = await response.text();
+                    console.error('🧪 Error response:', errorText);
+                    resultDiv.innerHTML = `<p class="error">❌ Failed to create notification: ${response.status} - ${errorText}</p>`;
+                }
+
+            } catch (error) {
+                console.error('🧪 Error:', error);
+                resultDiv.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+            }
+        }
+    </script>
+</body>
+</html>
