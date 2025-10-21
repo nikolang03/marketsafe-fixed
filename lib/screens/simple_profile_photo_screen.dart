@@ -6,7 +6,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
-import '../services/face_recognition_service.dart';
+import '../services/real_face_recognition_service.dart';
 import '../services/product_service.dart';
 
 class SimpleProfilePhotoScreen extends StatefulWidget {
@@ -179,9 +179,9 @@ class _SimpleProfilePhotoScreenState extends State<SimpleProfilePhotoScreen> {
       }
 
       final userData = userDoc.data()!;
-      final storedFaceFeatures = userData['faceFeatures'];
+      final storedBiometricFeatures = userData['biometricFeatures'];
 
-      if (storedFaceFeatures == null) {
+      if (storedBiometricFeatures == null) {
         return {
           'success': false,
           'error': 'No face data found for this user. Please complete face verification first.',
@@ -190,20 +190,20 @@ class _SimpleProfilePhotoScreenState extends State<SimpleProfilePhotoScreen> {
       }
 
       // Extract features from the uploaded photo
-      final detectedFeatures = FaceRecognitionService.extractFaceFeatures(detectedFace);
+      final detectedFeatures = await RealFaceRecognitionService.extractBiometricFeatures(detectedFace);
       
-      // Handle different face features formats
+      // Handle biometric features format
       List<double> storedFeatures = [];
       
-      if (storedFaceFeatures is Map && storedFaceFeatures.containsKey('featureVector')) {
-        // New format: {featureVector: [...], featureCount: 128, ...}
-        final featureVector = storedFaceFeatures['featureVector'];
-        if (featureVector is List) {
-          storedFeatures = featureVector.cast<double>();
+      if (storedBiometricFeatures is Map && storedBiometricFeatures.containsKey('biometricSignature')) {
+        // New format: {biometricSignature: [...], featureCount: 64, ...}
+        final biometricSignature = storedBiometricFeatures['biometricSignature'];
+        if (biometricSignature is List) {
+          storedFeatures = biometricSignature.cast<double>();
         }
-      } else if (storedFaceFeatures is List) {
+      } else if (storedBiometricFeatures is List) {
         // Old format: direct list of features
-        storedFeatures = storedFaceFeatures.cast<double>();
+        storedFeatures = storedBiometricFeatures.cast<double>();
       }
 
       if (storedFeatures.isEmpty) {
@@ -214,8 +214,8 @@ class _SimpleProfilePhotoScreenState extends State<SimpleProfilePhotoScreen> {
         };
       }
 
-      // Calculate similarity
-      final similarity = FaceRecognitionService.calculateSimilarity(
+      // Calculate real biometric similarity
+      final similarity = RealFaceRecognitionService.calculateBiometricSimilarity(
         detectedFeatures, 
         storedFeatures,
       );

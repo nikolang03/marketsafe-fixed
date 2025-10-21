@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'dart:ui';
 import 'package:camera/camera.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
+import 'real_face_recognition_service.dart';
 
 class SignupFaceVerificationService {
   static final SignupFaceVerificationService _instance = SignupFaceVerificationService._internal();
@@ -23,6 +24,7 @@ class SignupFaceVerificationService {
   List<double> _eyeProbabilities = [];
   int _frameCount = 0;
   DateTime? _verificationStartTime;
+  CameraImage? _lastCameraImage; // Store last camera image for embedding generation
 
   void initialize() {
     _faceDetector = FaceDetector(
@@ -38,13 +40,14 @@ class SignupFaceVerificationService {
   }
 
   // Main verification method for signup
-  Future<bool> performSignupVerification(CameraController cameraController) async {
+  Future<bool> performSignupVerification(CameraController cameraController, [CameraImage? cameraImage]) async {
     print('🔍 Starting comprehensive signup face verification...');
     
     _verificationStartTime = DateTime.now();
     _isVerificationComplete = false;
     _verificationProgress = 0.0;
     _currentStep = "Detecting face...";
+    _lastCameraImage = cameraImage; // Store camera image for 128D embedding
     
     const int maxFrames = 200; // 40 seconds at 200ms intervals
     int verificationStep = 0;
@@ -337,30 +340,78 @@ class SignupFaceVerificationService {
   }
 
   // Save verification data
-  void _saveVerificationData(Face face) {
-    _verificationData = {
-      'verificationTime': DateTime.now().toIso8601String(),
-      'verificationDuration': _verificationStartTime != null 
-          ? DateTime.now().difference(_verificationStartTime!).inMilliseconds 
-          : 0,
-      'frameCount': _frameCount,
-      'faceArea': face.boundingBox.width * face.boundingBox.height,
-      'eyeProbabilities': _eyeProbabilities,
-      'facePositions': _facePositions.map((pos) => {
-        'x': pos.left,
-        'y': pos.top,
-        'width': pos.width,
-        'height': pos.height,
-      }).toList(),
-      'verificationSteps': [
-        'Face presence and quality check',
-        'Face stability verification',
-        'Liveness detection',
-        'Head pose verification',
-        'Final comprehensive check'
-      ],
-      'success': true,
-    };
+  void _saveVerificationData(Face face) async {
+    try {
+      // Generate 128D face embedding for better security
+      print('🔍 Generating 128D face embedding for signup...');
+      List<double>? faceEmbedding;
+      
+      if (_lastCameraImage != null) {
+        faceEmbedding = await RealFaceRecognitionService.extractBiometricFeatures(face, _lastCameraImage!);
+        print('✅ 128D face embedding generated successfully');
+      } else {
+        print('⚠️ No camera image available, skipping 128D embedding generation');
+      }
+      
+      _verificationData = {
+        'verificationTime': DateTime.now().toIso8601String(),
+        'verificationDuration': _verificationStartTime != null 
+            ? DateTime.now().difference(_verificationStartTime!).inMilliseconds 
+            : 0,
+        'frameCount': _frameCount,
+        'faceArea': face.boundingBox.width * face.boundingBox.height,
+        'eyeProbabilities': _eyeProbabilities,
+        'facePositions': _facePositions.map((pos) => {
+          'x': pos.left,
+          'y': pos.top,
+          'width': pos.width,
+          'height': pos.height,
+        }).toList(),
+        'verificationSteps': [
+          'Face presence and quality check',
+          'Face stability verification',
+          'Liveness detection',
+          'Head pose verification',
+          'Final comprehensive check'
+        ],
+        'success': true,
+      };
+      
+      // Add face embedding data if available
+      if (faceEmbedding != null) {
+        _verificationData['faceEmbedding'] = faceEmbedding;
+        _verificationData['embeddingType'] = '128D';
+        print('✅ 128D face embedding generated and stored for signup');
+      } else {
+        print('⚠️ Face embedding not available for signup verification');
+      }
+    } catch (e) {
+      print('❌ Error generating face embedding: $e');
+      // Fallback to basic data without embedding
+      _verificationData = {
+        'verificationTime': DateTime.now().toIso8601String(),
+        'verificationDuration': _verificationStartTime != null 
+            ? DateTime.now().difference(_verificationStartTime!).inMilliseconds 
+            : 0,
+        'frameCount': _frameCount,
+        'faceArea': face.boundingBox.width * face.boundingBox.height,
+        'eyeProbabilities': _eyeProbabilities,
+        'facePositions': _facePositions.map((pos) => {
+          'x': pos.left,
+          'y': pos.top,
+          'width': pos.width,
+          'height': pos.height,
+        }).toList(),
+        'verificationSteps': [
+          'Face presence and quality check',
+          'Face stability verification',
+          'Liveness detection',
+          'Head pose verification',
+          'Final comprehensive check'
+        ],
+        'success': true,
+      };
+    }
   }
 
   // Get current verification status

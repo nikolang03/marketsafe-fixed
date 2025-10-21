@@ -23,9 +23,11 @@ class _NavigationWrapperState extends State<NavigationWrapper>
     with TickerProviderStateMixin {
   int _selectedIndex = 0;
   int _unreadNotificationCount = 0;
+  int _unreadMessageCount = 0;
   String? _currentUserId;
   late PageController _pageController;
   StreamSubscription<QuerySnapshot>? _notificationSubscription;
+  StreamSubscription<QuerySnapshot>? _messageSubscription;
   
   // Animation controllers
   late AnimationController _fabAnimationController;
@@ -77,6 +79,7 @@ class _NavigationWrapperState extends State<NavigationWrapper>
   @override
   void dispose() {
     _notificationSubscription?.cancel();
+    _messageSubscription?.cancel();
     _pageController.dispose();
     _fabAnimationController.dispose();
     _badgeAnimationController.dispose();
@@ -99,6 +102,7 @@ class _NavigationWrapperState extends State<NavigationWrapper>
     // Set up real-time listener after getting user ID
     if (_currentUserId != null && _currentUserId!.isNotEmpty) {
       _setupRealTimeListener();
+      _loadMessageCount();
     }
   }
 
@@ -128,6 +132,43 @@ class _NavigationWrapperState extends State<NavigationWrapper>
   Future<void> refreshNotificationCount() async {
     print('🔄 Manually refreshing notification count...');
     await _loadNotificationCount();
+    await _loadMessageCount();
+  }
+
+  Future<void> _loadMessageCount() async {
+    if (_currentUserId != null && _currentUserId!.isNotEmpty) {
+      try {
+        final firestore = FirebaseFirestore.instanceFor(
+          app: Firebase.app(),
+          databaseId: 'marketsafe',
+        );
+        
+        final conversationsSnapshot = await firestore
+            .collection('conversations')
+            .where('participants', arrayContains: _currentUserId)
+            .get();
+
+        int totalUnreadCount = 0;
+        for (var doc in conversationsSnapshot.docs) {
+          final data = doc.data();
+          final unreadCounts = data['unreadCounts'] as Map<String, dynamic>? ?? {};
+          final userUnreadCount = unreadCounts[_currentUserId] as int? ?? 0;
+          totalUnreadCount += userUnreadCount;
+        }
+
+        print('💬 NavigationWrapper: Found $totalUnreadCount unread messages');
+        
+        if (mounted) {
+          setState(() {
+            _unreadMessageCount = totalUnreadCount;
+          });
+        }
+      } catch (e) {
+        print('❌ Error loading message count: $e');
+      }
+    } else {
+      print('❌ No current user ID for message count');
+    }
   }
 
   void _setupRealTimeListener() {
@@ -160,6 +201,32 @@ class _NavigationWrapperState extends State<NavigationWrapper>
         }
       }, onError: (error) {
         print('❌ NavigationWrapper real-time listener error: $error');
+      });
+
+      // Set up real-time listener for messages
+      _messageSubscription = firestore
+          .collection('conversations')
+          .where('participants', arrayContains: _currentUserId)
+          .snapshots()
+          .listen((snapshot) {
+        // Count unread messages across all conversations
+        int totalUnreadCount = 0;
+        for (var doc in snapshot.docs) {
+          final data = doc.data();
+          final unreadCounts = data['unreadCounts'] as Map<String, dynamic>? ?? {};
+          final userUnreadCount = unreadCounts[_currentUserId] as int? ?? 0;
+          totalUnreadCount += userUnreadCount;
+        }
+        
+        print('💬 Real-time unread message count: $totalUnreadCount');
+        
+        if (mounted) {
+          setState(() {
+            _unreadMessageCount = totalUnreadCount;
+          });
+        }
+      }, onError: (error) {
+        print('❌ NavigationWrapper message listener error: $error');
       });
     }
   }
@@ -423,6 +490,7 @@ class _NavigationWrapperState extends State<NavigationWrapper>
   Widget _buildNavItem(int index, IconData icon, String label) {
     final isSelected = _selectedIndex == index;
     final isNotificationTab = index == 1;
+    final isMessageTab = index == 3;
     
     return GestureDetector(
       onTap: () => _onBottomIconTap(index),
@@ -445,6 +513,12 @@ class _NavigationWrapperState extends State<NavigationWrapper>
                 right: -8,
                 top: -8,
                 child: _buildNotificationBadge(),
+              ),
+            if (isMessageTab && _unreadMessageCount > 0)
+              Positioned(
+                right: -8,
+                top: -8,
+                child: _buildMessageBadge(),
               ),
           ],
         ),
@@ -565,5 +639,50 @@ class _NavigationWrapperState extends State<NavigationWrapper>
       },
     );
   }
+
+  Widget _buildMessageBadge() {
+    if (_unreadMessageCount <= 0) return const SizedBox.shrink();
+    
+    return AnimatedBuilder(
+      animation: _badgeBounceAnimation,
+      builder: (context, child) {
+        return Transform.scale(
+          scale: _badgeBounceAnimation.value,
+          child: Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Colors.blue, Color(0xFF0066CC)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.blue.withOpacity(0.3),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            constraints: const BoxConstraints(
+              minWidth: 20,
+              minHeight: 20,
+            ),
+            child: Text(
+              _unreadMessageCount > 99 ? '99+' : _unreadMessageCount.toString(),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        );
+      },
+    );
+  }
+
 
 }

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -7,6 +8,7 @@ import '../models/product_model.dart';
 import 'video_upload_service.dart';
 import 'notification_service.dart';
 import 'network_service.dart';
+import 'watermarking_service.dart';
 
 class ProductService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instanceFor(
@@ -77,14 +79,18 @@ class ProductService {
       // Generate unique product ID
       final productId = 'product_${DateTime.now().millisecondsSinceEpoch}_${userId}';
       
-      // Upload multiple images to Firebase Storage
-      print('📤 Uploading ${imageFiles.length} product images...');
+      // Upload multiple images to Firebase Storage with watermarking
+      print('📤 Uploading ${imageFiles.length} product images with watermarking...');
       final List<String> imageUrls = [];
       for (int i = 0; i < imageFiles.length; i++) {
         try {
-          final imageUrl = await uploadProductImage(imageFiles[i], '${productId}_$i');
+          final imageUrl = await uploadProductImage(
+            imageFiles[i], 
+            '${productId}_$i',
+            username: sellerUsername,
+          );
           imageUrls.add(imageUrl);
-          print('✅ Image ${i + 1} uploaded: $imageUrl');
+          print('✅ Image ${i + 1} uploaded with watermark: $imageUrl');
         } catch (e) {
           print('⚠️ Image ${i + 1} upload failed: $e');
           print('⚠️ Skipping failed image upload');
@@ -162,10 +168,38 @@ class ProductService {
     );
   }
 
-  // Upload product image to Firebase Storage
-  static Future<String> uploadProductImage(File imageFile, String productId) async {
+  // Upload product image to Firebase Storage with watermarking
+  static Future<String> uploadProductImage(File imageFile, String productId, {String? username}) async {
     try {
       print('📤 Uploading image to Firebase Storage...');
+      
+      // Validate image authenticity and add watermark
+      Uint8List imageBytes;
+      final fileBytes = await imageFile.readAsBytes();
+      
+      // Check if image is from internet
+      final isFromInternet = await WatermarkingService.isImageFromInternet(fileBytes);
+      if (isFromInternet) {
+        throw Exception('Images from internet/web are not allowed. Please use images taken with your device camera.');
+      }
+      
+      // Validate image authenticity
+      final validationResult = await WatermarkingService.validateImageAuthenticity(
+        imageBytes: fileBytes,
+        username: username ?? 'unknown',
+        userId: productId.split('_').last, // Extract userId from productId
+      );
+      
+      if (!validationResult['isAuthentic'] && validationResult['warnings'].isNotEmpty) {
+        print('⚠️ Image authenticity warnings: ${validationResult['warnings']}');
+        // Continue with upload but log warnings
+      }
+      
+      // Watermarking is now handled in the preview screen
+      // Images are already watermarked when they reach this point
+      imageBytes = fileBytes;
+      print('📸 Using pre-watermarked image');
+      
       final ref = _storage.ref().child('products').child('$productId.jpg');
       
       // Set metadata to help with upload
@@ -174,10 +208,13 @@ class ProductService {
         customMetadata: {
           'productId': productId,
           'uploadedAt': DateTime.now().toIso8601String(),
+          'watermarked': username != null ? 'true' : 'false',
+          'username': username ?? 'unknown',
         },
       );
       
-      final uploadTask = ref.putFile(imageFile, metadata);
+      // Upload watermarked image
+      final uploadTask = ref.putData(imageBytes, metadata);
       final snapshot = await uploadTask;
       final downloadUrl = await snapshot.ref.getDownloadURL();
       
@@ -243,6 +280,7 @@ class ProductService {
       
       // Get seller name with multiple fallback options
       String sellerName = 'Unknown Seller';
+      String sellerUsername = 'unknown';
       if (userData != null) {
         if (userData['firstName'] != null && userData['lastName'] != null) {
           sellerName = '${userData['firstName']} ${userData['lastName']}';
@@ -250,6 +288,11 @@ class ProductService {
           sellerName = userData['fullName'];
         } else if (userData['username'] != null) {
           sellerName = userData['username'];
+        }
+        
+        // Get username for watermarking
+        if (userData['username'] != null) {
+          sellerUsername = userData['username'];
         }
       }
 
@@ -259,12 +302,13 @@ class ProductService {
       print('🆔 Generated product ID: $productId');
       print('👤 Seller name: $sellerName');
 
-      // Upload video and generate thumbnail
-      print('📤 Uploading video and generating thumbnail...');
+      // Upload video and generate thumbnail with watermarking
+      print('📤 Uploading video and generating watermarked thumbnail...');
       final videoData = await VideoUploadService.uploadVideoWithThumbnail(
         videoPath: videoPath,
         userId: userId,
         productId: productId,
+        username: sellerUsername,
       );
 
       // Create product document

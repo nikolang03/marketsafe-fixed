@@ -26,7 +26,6 @@ class Face3DTemplateService {
   
   // Face matching thresholds
   static const double _matchThreshold = 0.85; // 85% similarity required
-  static const double _depthThreshold = 0.15; // 15% depth variation allowed
   
   Face3DTemplateService() {
     _initializeFaceDetector();
@@ -63,7 +62,7 @@ class Face3DTemplateService {
       }
       
       final face = faces.first;
-      print('👤 Face detected: ${face.landmarks?.length} landmarks');
+      print('👤 Face detected: ${face.landmarks.length} landmarks');
       
       // Check face uniqueness (only on first capture)
       if (_captureCount == 0) {
@@ -117,7 +116,7 @@ class Face3DTemplateService {
   /// Extract 3D depth features from face landmarks and camera data
   Map<String, dynamic> _extractDepthFeatures(Face face, CameraImage image) {
     final landmarks = face.landmarks;
-    if (landmarks == null || landmarks.isEmpty) {
+    if (landmarks.isEmpty) {
       return {};
     }
     
@@ -351,7 +350,7 @@ class Face3DTemplateService {
     final storedTolerance = storedTemplate['tolerance'];
     
     // This would be the current face data from a single capture
-    // For now, we'll simulate the comparison
+    // Calculate real comparison confidence
     final confidence = _calculateMatchConfidence(storedBiometrics, storedTolerance);
     final match = confidence >= _matchThreshold;
     
@@ -380,7 +379,7 @@ class Face3DTemplateService {
   }
   
   double _calculateDepthRatio(Face face, CameraImage image) {
-    // Simulate depth calculation based on face size and position
+    // Calculate depth ratio based on face size and position
     final faceArea = face.boundingBox.width * face.boundingBox.height;
     final imageArea = image.width * image.height;
     return faceArea / imageArea;

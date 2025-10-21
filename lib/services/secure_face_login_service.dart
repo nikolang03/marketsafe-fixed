@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:camera/camera.dart';
-import 'face_recognition_service.dart';
+import 'real_face_recognition_service.dart';
 
 class SecureFaceLoginService {
   static final FaceDetector _faceDetector = FaceDetector(
@@ -17,7 +17,7 @@ class SecureFaceLoginService {
   );
 
   // Secure login with liveness detection
-  static Future<String?> secureFaceLogin(CameraController cameraController) async {
+  static Future<String?> secureFaceLogin(CameraController cameraController, [CameraImage? cameraImage]) async {
     try {
       print('🔒 Starting secure face login with liveness detection...');
       
@@ -38,7 +38,8 @@ class SecureFaceLoginService {
 
       // Step 3: Face recognition with high threshold
       print('🔍 Performing face recognition...');
-      final userId = await FaceRecognitionService.findUserByFace(initialFace);
+      // Use the provided camera image for 128D embedding extraction
+      final userId = await RealFaceRecognitionService.findUserByRealFace(initialFace, cameraImage);
       
       if (userId != null) {
         print('✅ Secure login successful for user: $userId');

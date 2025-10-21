@@ -1,444 +1,567 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import '../models/product_model.dart';
-import '../services/product_service.dart';
-import '../widgets/image_swiper.dart';
-import 'edit_product_screen.dart';
+import 'package:flutter/services.dart';
+import 'package:video_player/video_player.dart';
+import 'offer_dialog.dart';
 
 class ProductPreviewScreen extends StatefulWidget {
-  final Product product;
-  final VoidCallback? onProductUpdated;
+  final Map<String, dynamic> product;
+  final String currentUserId;
 
   const ProductPreviewScreen({
-    super.key,
+    Key? key,
     required this.product,
-    this.onProductUpdated,
-  });
+    required this.currentUserId,
+  }) : super(key: key);
 
   @override
-  State<ProductPreviewScreen> createState() => _ProductPreviewScreenState();
+  _ProductPreviewScreenState createState() => _ProductPreviewScreenState();
 }
 
 class _ProductPreviewScreenState extends State<ProductPreviewScreen> {
-  late Product _currentProduct;
-  String? _currentUserId;
-  bool _isDeleting = false;
+  List<VideoPlayerController> _videoControllers = [];
+  bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    _currentProduct = widget.product;
-    _getCurrentUserId();
+    _loadMediaFiles();
+    
+    // Set status bar style to match the gradient
+    SystemChrome.setSystemUIOverlayStyle(
+      SystemUiOverlayStyle(
+        statusBarColor: Color(0xFF8B0000), // Dark red to match gradient
+        statusBarIconBrightness: Brightness.light, // White icons
+        statusBarBrightness: Brightness.dark, // For iOS
+        systemNavigationBarColor: Colors.black, // Black navigation bar
+        systemNavigationBarIconBrightness: Brightness.light, // White icons
+      ),
+    );
   }
 
-  Future<String?> _getCurrentUserId() async {
-    final prefs = await SharedPreferences.getInstance();
-    final userId = prefs.getString('current_user_id') ?? 
-                   prefs.getString('signup_user_id');
+  Future<void> _loadMediaFiles() async {
     setState(() {
-      _currentUserId = userId;
+      _isLoading = true;
     });
-    return userId;
+
+    // Simulate loading delay
+    await Future.delayed(Duration(milliseconds: 500));
+    
+    setState(() {
+      _isLoading = false;
+    });
   }
 
-  bool get _isOwner => _currentUserId == _currentProduct.sellerId;
-
-  Future<void> _editProduct() async {
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => EditProductScreen(product: _currentProduct),
+  @override
+  void dispose() {
+    for (var controller in _videoControllers) {
+      controller.dispose();
+    }
+    
+    // Restore default status bar style
+    SystemChrome.setSystemUIOverlayStyle(
+      SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.dark,
+        statusBarBrightness: Brightness.light,
+        systemNavigationBarColor: Colors.white,
+        systemNavigationBarIconBrightness: Brightness.dark,
       ),
     );
     
-    if (result == true && widget.onProductUpdated != null) {
-      widget.onProductUpdated!();
-    }
+    super.dispose();
   }
 
-  Future<void> _deleteProduct() async {
-    // Show confirmation dialog
-    final shouldDelete = await showDialog<bool>(
+  void _showOfferDialog() {
+    print('🔍 ProductPreviewScreen: Showing offer dialog');
+    print('  - Received currentUserId: ${widget.currentUserId}');
+    
+    showDialog(
       context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: Colors.grey[900],
-          title: const Text(
-            'Delete Product',
-            style: TextStyle(color: Colors.white),
-          ),
-          content: const Text(
-            'Are you sure you want to delete this product? This action cannot be undone.',
-            style: TextStyle(color: Colors.white70),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text(
-                'Cancel',
-                style: TextStyle(color: Colors.grey),
-              ),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text(
-                'Delete',
-                style: TextStyle(color: Colors.red),
-              ),
-            ),
-          ],
-        );
-      },
+      builder: (context) => OfferDialog(
+        product: widget.product,
+        currentUserId: widget.currentUserId,
+      ),
     );
+  }
 
-    if (shouldDelete == true) {
-      setState(() {
-        _isDeleting = true;
-      });
-
-      try {
-        final success = await ProductService.deleteProduct(_currentProduct.id);
-        
-        if (success) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Product deleted successfully'),
-                backgroundColor: Colors.green,
-              ),
-            );
-            
-            // Navigate back and refresh
-            Navigator.pop(context);
-            if (widget.onProductUpdated != null) {
-              widget.onProductUpdated!();
-            }
-          }
-        } else {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Failed to delete product'),
-                backgroundColor: Colors.red,
-              ),
-            );
-          }
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error deleting product: $e'),
-              backgroundColor: Colors.red,
+  Widget _buildDetailRow(String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 100,
+          child: Text(
+            label,
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
             ),
-          );
-        }
-      } finally {
-        if (mounted) {
-          setState(() {
-            _isDeleting = false;
-          });
-        }
-      }
-    }
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _formatTimePosted() {
+    // For now, return a sample time. In a real app, you'd get this from the product data
+    final now = DateTime.now();
+    return '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF5C0000),
-        elevation: 0,
-        leading: IconButton(
-          onPressed: () => Navigator.pop(context),
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-        ),
-        title: const Text(
-          'Product Preview',
-          style: TextStyle(color: Colors.white),
-        ),
-        actions: _isOwner ? [
-          IconButton(
-            onPressed: _isDeleting ? null : _editProduct,
-            icon: const Icon(Icons.edit, color: Colors.white),
-            tooltip: 'Edit Product',
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF8B0000), // Dark red at top
+              Colors.black,      // Black at bottom
+            ],
           ),
-          IconButton(
-            onPressed: _isDeleting ? null : _deleteProduct,
-            icon: _isDeleting 
-              ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    color: Colors.white,
-                    strokeWidth: 2,
-                  ),
-                )
-              : const Icon(Icons.delete, color: Colors.red),
-            tooltip: 'Delete Product',
-          ),
-        ] : null,
-      ),
-      body: _isDeleting
-          ? const Center(
-              child: CircularProgressIndicator(color: Colors.white),
-            )
-          : SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+            // Custom AppBar
+            Container(
+              height: 60,
+              color: Color(0xFF8B0000),
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
                 children: [
-                  // Product Images
-                  if (_currentProduct.imageUrls.isNotEmpty)
-                    SizedBox(
-                      height: 300,
-                      child: ImageSwiper(
-                        imageUrls: _currentProduct.imageUrls,
-                        height: 300,
+                  IconButton(
+                    icon: Icon(Icons.arrow_back, color: Colors.white),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                  Expanded(
+                    child: Text(
+                      'Make Offer',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
                       ),
-                    )
-                  else
-                    Container(
-                      height: 300,
-                      color: Colors.grey[800],
-                      child: const Center(
-                        child: Icon(
-                          Icons.image_not_supported,
-                          color: Colors.grey,
-                          size: 64,
-                        ),
-                      ),
+                      textAlign: TextAlign.center,
                     ),
-                  
-                  // Product Details
-                  Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Title and Price
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                _currentProduct.title,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            Text(
-                              '₱${_currentProduct.price.toStringAsFixed(2)}',
-                              style: const TextStyle(
-                                color: Colors.green,
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                        
-                        const SizedBox(height: 16),
-                        
-                        // Category and Condition
-                        Row(
-                          children: [
-                            _buildInfoChip(
-                              Icons.category,
-                              _currentProduct.category,
-                              Colors.blue,
-                            ),
-                            const SizedBox(width: 12),
-                            _buildInfoChip(
-                              Icons.verified,
-                              _currentProduct.condition,
-                              Colors.orange,
-                            ),
-                            const SizedBox(width: 12),
-                            _buildInfoChip(
-                              Icons.visibility,
-                              '${_currentProduct.views} views',
-                              Colors.purple,
-                            ),
-                          ],
-                        ),
-                        
-                        const SizedBox(height: 20),
-                        
-                        // Description
-                        const Text(
-                          'Description',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          _currentProduct.description,
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 16,
-                            height: 1.5,
-                          ),
-                        ),
-                        
-                        const SizedBox(height: 20),
-                        
-                        // Seller Info
-                        const Text(
-                          'Seller Information',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            CircleAvatar(
-                              radius: 20,
-                              backgroundColor: Colors.grey[800],
-                              backgroundImage: _currentProduct.sellerProfilePictureUrl != null
-                                  ? NetworkImage(_currentProduct.sellerProfilePictureUrl!)
-                                  : null,
-                              child: _currentProduct.sellerProfilePictureUrl == null
-                                  ? const Icon(Icons.person, color: Colors.white)
-                                  : null,
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    _currentProduct.sellerName,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  if (_currentProduct.sellerUsername != null)
-                                    Text(
-                                      '@${_currentProduct.sellerUsername}',
-                                      style: const TextStyle(
-                                        color: Colors.grey,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        
-                        const SizedBox(height: 20),
-                        
-                        // Product Status
-                        if (_currentProduct.status != 'active')
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: _currentProduct.status == 'sold' 
-                                  ? Colors.green.withOpacity(0.2)
-                                  : Colors.orange.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: _currentProduct.status == 'sold' 
-                                    ? Colors.green
-                                    : Colors.orange,
-                                width: 1,
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  _currentProduct.status == 'sold' 
-                                      ? Icons.check_circle
-                                      : Icons.pause_circle,
-                                  color: _currentProduct.status == 'sold' 
-                                      ? Colors.green
-                                      : Colors.orange,
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Status: ${_currentProduct.status.toUpperCase()}',
-                                  style: TextStyle(
-                                    color: _currentProduct.status == 'sold' 
-                                        ? Colors.green
-                                        : Colors.orange,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        
-                        const SizedBox(height: 20),
-                        
-                        // Posted Date
-                        Text(
-                          'Posted on ${_formatDate(_currentProduct.createdAt)}',
-                          style: const TextStyle(
-                            color: Colors.grey,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
-                    ),
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.notifications, color: Colors.white),
+                    onPressed: () {
+                      // Navigate to notifications
+                    },
                   ),
                 ],
               ),
             ),
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Media placeholder
+                    Container(
+                      height: 300,
+                      width: double.infinity,
+                      margin: EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[300],
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: _isLoading
+                          ? Center(child: CircularProgressIndicator())
+                          : _buildMediaDisplay(),
+                    ),
+
+                    // Product information
+                    Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Title and Make Offer button in a row
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              // Title
+                              Expanded(
+                                child: Text(
+                                  widget.product['title'] ?? 'TITLE',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              // Make Offer button
+                              ElevatedButton(
+                                onPressed: _showOfferDialog,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Color(0xFF8B0000), // Dark red background
+                                  side: BorderSide(color: Colors.white, width: 1),
+                                  padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  elevation: 4,
+                                ),
+                                child: Text(
+                                  'MAKE OFFER',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          SizedBox(height: 16),
+
+                          // Details section
+                          Container(
+                            width: double.infinity,
+                            padding: EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'DETAILS',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                SizedBox(height: 12),
+                                
+                                // Price detail
+                                _buildDetailRow('Price:', '${widget.product['price'] ?? '500'} PHP'),
+                                SizedBox(height: 8),
+                                
+                                // Date posted detail
+                                _buildDetailRow('Date Posted:', widget.product['date'] ?? 'July 12 2025'),
+                                SizedBox(height: 8),
+                                
+                                // Time posted detail (using current time as example)
+                                _buildDetailRow('Time Posted:', _formatTimePosted()),
+                                SizedBox(height: 8),
+                                
+                                // Description detail
+                                _buildDetailRow('Description:', widget.product['description'] ?? 'No description available'),
+                              ],
+                            ),
+                          ),
+                          SizedBox(height: 32),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
-  Widget _buildInfoChip(IconData icon, String text, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.2),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color, width: 1),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: color, size: 16),
-          const SizedBox(width: 4),
-          Text(
-            text,
-            style: TextStyle(
-              color: color,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
+
+  Widget _buildMediaDisplay() {
+    final imageUrls = widget.product['imageUrls'] as List<dynamic>? ?? [];
+    final videoUrl = widget.product['videoUrl'] as String?;
+    final videoThumbnailUrl = widget.product['videoThumbnailUrl'] as String?;
+    final mediaType = widget.product['mediaType'] as String?;
+
+    // If it's a video product, show video thumbnail
+    if (mediaType == 'video' && videoThumbnailUrl != null && videoThumbnailUrl.isNotEmpty) {
+      return Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.network(
+                videoThumbnailUrl,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return Container(
+                    color: Colors.black,
+                    child: const Center(
+                      child: Icon(Icons.video_library, color: Colors.white54, size: 50),
+                    ),
+                  );
+                },
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) return child;
+                  return const Center(
+                    child: CircularProgressIndicator(color: Colors.white),
+                  );
+                },
+              ),
             ),
+            // Video play button overlay
+            Center(
+              child: GestureDetector(
+                onTap: () => _showVideoPlayer(videoUrl!),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.6),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.play_arrow,
+                    color: Colors.white,
+                    size: 48,
+                  ),
+                ),
+              ),
+            ),
+            // Video badge
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.red,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Text(
+                  'VIDEO',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    
+    // For image products, show images
+    if (imageUrls.isNotEmpty) {
+      return PageView.builder(
+        itemCount: imageUrls.length,
+        itemBuilder: (context, index) {
+          final imageUrl = imageUrls[index] as String;
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Image.network(
+              imageUrl,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) {
+                return Container(
+                  color: Colors.grey[800],
+                  child: const Center(
+                    child: Icon(Icons.image_not_supported, color: Colors.grey, size: 50),
+                  ),
+                );
+              },
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) return child;
+                return const Center(
+                  child: CircularProgressIndicator(color: Colors.white),
+                );
+              },
+            ),
+          );
+        },
+      );
+    }
+    
+    // No media available
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.image, size: 50, color: Colors.grey[600]),
+          SizedBox(height: 8),
+          Text(
+            'No media available',
+            style: TextStyle(color: Colors.grey[600]),
           ),
         ],
       ),
     );
   }
 
-  String _formatDate(DateTime date) {
-    final now = DateTime.now();
-    final difference = now.difference(date);
-    
-    if (difference.inDays == 0) {
-      return 'Today';
-    } else if (difference.inDays == 1) {
-      return 'Yesterday';
-    } else if (difference.inDays < 7) {
-      return '${difference.inDays} days ago';
-    } else {
-      return '${date.day}/${date.month}/${date.year}';
+  void _showVideoPlayer(String videoUrl) {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => _VideoPlayerDialog(
+        videoUrl: videoUrl,
+        productTitle: widget.product['title'] ?? 'Product Video',
+      ),
+    );
+  }
+}
+
+class _VideoPlayerDialog extends StatefulWidget {
+  final String videoUrl;
+  final String productTitle;
+
+  const _VideoPlayerDialog({
+    required this.videoUrl,
+    required this.productTitle,
+  });
+
+  @override
+  State<_VideoPlayerDialog> createState() => _VideoPlayerDialogState();
+}
+
+class _VideoPlayerDialogState extends State<_VideoPlayerDialog> {
+  late VideoPlayerController _controller;
+  bool _isInitialized = false;
+  bool _hasError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeVideo();
+  }
+
+  Future<void> _initializeVideo() async {
+    try {
+      _controller = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
+      await _controller.initialize();
+      
+      _controller.addListener(() {
+        if (mounted) {
+          setState(() {});
+        }
+      });
+      
+      setState(() {
+        _isInitialized = true;
+      });
+    } catch (e) {
+      setState(() {
+        _hasError = true;
+      });
     }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.black,
+      child: Container(
+        width: MediaQuery.of(context).size.width * 0.9,
+        height: MediaQuery.of(context).size.height * 0.7,
+        child: Column(
+          children: [
+            // Header
+            Container(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      widget.productTitle,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close, color: Colors.white),
+                  ),
+                ],
+              ),
+            ),
+            // Video player
+            Expanded(
+              child: _hasError
+                  ? const Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.error, color: Colors.red, size: 48),
+                          SizedBox(height: 16),
+                          Text(
+                            'Error loading video',
+                            style: TextStyle(color: Colors.white),
+                          ),
+                        ],
+                      ),
+                    )
+                  : !_isInitialized
+                      ? const Center(
+                          child: CircularProgressIndicator(color: Colors.red),
+                        )
+                      : GestureDetector(
+                          onTap: () {
+                            if (_controller.value.isPlaying) {
+                              _controller.pause();
+                            } else {
+                              _controller.play();
+                            }
+                            setState(() {});
+                          },
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              AspectRatio(
+                                aspectRatio: _controller.value.aspectRatio,
+                                child: VideoPlayer(_controller),
+                              ),
+                              // Play/Pause overlay
+                              if (!_controller.value.isPlaying)
+                                Center(
+                                  child: Container(
+                                    padding: const EdgeInsets.all(24),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black.withOpacity(0.7),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.play_arrow,
+                                      color: Colors.white,
+                                      size: 48,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

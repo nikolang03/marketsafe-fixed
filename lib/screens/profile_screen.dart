@@ -895,16 +895,43 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  // Format date for product display
+  String _formatProductDate(DateTime? date) {
+    if (date == null) return 'Unknown Date';
+    
+    final months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    
+    return '${months[date.month - 1]} ${date.day} ${date.year}';
+  }
+
   Widget _buildProductGridItem(Product product) {
     return GestureDetector(
       onTap: () {
         // Navigate to product preview screen
+        final productMap = {
+          'id': product.id,
+          'title': product.title,
+          'price': product.price.toString(),
+          'description': product.description,
+          'details': product.description,
+          'date': _formatProductDate(product.createdAt),
+          'userId': product.sellerId,
+          'sellerName': product.sellerName,
+          'imageUrls': product.imageUrls,
+          'videoUrl': product.videoUrl,
+          'videoThumbnailUrl': product.videoThumbnailUrl,
+          'mediaType': product.mediaType,
+        };
+        
         Navigator.push(
           context,
           MaterialPageRoute(
             builder: (context) => ProductPreviewScreen(
-              product: product,
-              onProductUpdated: _loadUserProducts,
+              product: productMap,
+              currentUserId: userData?['id'] ?? '',
             ),
           ),
         );

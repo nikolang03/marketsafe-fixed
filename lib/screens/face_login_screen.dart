@@ -40,6 +40,7 @@ class _FaceLoginScreenState extends State<FaceLoginScreen> {
   static const Duration _dialogCooldown = Duration(seconds: 10);
   static const Duration _lockoutDuration = Duration(minutes: 5);
   static const int _maxFailedAttempts = 5;
+  
 
   @override
   void initState() {
@@ -249,7 +250,7 @@ Future<void> _processImage(CameraImage image) async {
         final face = faces.first;
         print('Face detected! Processing for login...');
         print('Face bounding box: ${face.boundingBox}');
-        _detectFaceForLogin(face);
+        _detectFaceForLogin(face, image);
       } else {
         print('No face detected');
         if (mounted) {
@@ -299,7 +300,7 @@ Future<void> _processImage(CameraImage image) async {
             now.difference(_lastAuthenticationAttempt!) >
                 _authenticationCooldown) {
           _lastAuthenticationAttempt = now;
-          _detectFaceForLogin(face);
+          _detectFaceForLogin(face, null); // No camera image available in alternative method
         } else {
           print('Authentication cooldown active, skipping...');
         }
@@ -351,7 +352,7 @@ Future<void> _processImageFromFile() async {
             now.difference(_lastAuthenticationAttempt!) >
                 _authenticationCooldown) {
           _lastAuthenticationAttempt = now;
-          _detectFaceForLogin(face);
+          _detectFaceForLogin(face, null); // No camera image available in alternative method
         } else {
           print('Authentication cooldown active, skipping...');
         }
@@ -427,31 +428,29 @@ Future<void> _processImageFromFile() async {
     return bytes;
   }
 
-  void _detectFaceForLogin(Face face) async {
+  void _detectFaceForLogin(Face face, [CameraImage? cameraImage]) async {
     final box = face.boundingBox;
     final faceHeight = box.height;
     final faceWidth = box.width;
 
-    // Calculate progress based on face size
-    const targetSize = 200.0; // Lower threshold for login
-    final sizeProgress = ((faceHeight + faceWidth) / 2) / targetSize;
-    final progress = (sizeProgress * 100).clamp(0.0, 100.0);
+    // Simple face detection - no positioning or lighting requirements
+    final isFaceDetected = faceHeight > 50 && faceWidth > 50; // Very lenient requirements
 
     if (mounted) {
       setState(() {
-        _progressPercentage = progress;
-        _isFaceDetected =
-            faceHeight > 100 && faceWidth > 100; // Lower threshold
+        _progressPercentage = 100.0; // Always show 100% when face is detected
+        _isFaceDetected = isFaceDetected;
+        // No positioning data needed
       });
     }
 
-    // If face is detected and progress is good, try authentication
-    if (_isFaceDetected && progress > 50) {
-      await _authenticateFace(face);
+    // Proceed with authentication as soon as any face is detected
+    if (isFaceDetected) {
+      await _authenticateFace(face, cameraImage);
     }
   }
 
-  Future<void> _authenticateFace(Face face) async {
+  Future<void> _authenticateFace(Face face, [CameraImage? cameraImage]) async {
     if (_isAuthenticating) return;
 
     // Check for lockout
@@ -493,10 +492,10 @@ Future<void> _processImageFromFile() async {
         return;
       }
 
-      // Try to authenticate the face
-      print('Attempting face authentication...');
-      final userId = await FaceLoginService.authenticateUser(face);
-      print('Face authentication result: $userId');
+      // Try to authenticate the face using real biometric authentication
+      print('Attempting real biometric face authentication...');
+      final userId = await FaceLoginService.authenticateUser(face, cameraImage);
+      print('Biometric authentication result: $userId');
 
       if (userId == "LIVENESS_FAILED") {
         // Liveness detection failed, show specific dialog
@@ -645,7 +644,7 @@ Future<void> _processImageFromFile() async {
                 children: [
                   Icon(Icons.check_circle, color: Colors.green, size: 20),
                   SizedBox(width: 8),
-                  Text("Ensure good lighting on your face"),
+                  Text("Make sure your face is visible"),
                 ],
               ),
               SizedBox(height: 8),
@@ -816,16 +815,17 @@ Future<void> _processImageFromFile() async {
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               ),
               const SizedBox(height: 20),
+              // Camera container with elliptical shape (matching 3 facial verification)
               SizedBox(
-                width: 280,
-                height: 380,
+                width: 250,
+                height: 350,
                 child: Stack(
                   alignment: Alignment.center,
                   children: [
-                    // Circular progress indicator
+                    // Progress border
                     SizedBox(
-                      width: 280,
-                      height: 380,
+                      width: 250,
+                      height: 350,
                       child: CircularProgressIndicator(
                         value: _progressPercentage / 100.0,
                         strokeWidth: 8,
@@ -835,20 +835,118 @@ Future<void> _processImageFromFile() async {
                         ),
                       ),
                     ),
-                    // Camera preview container
+                    // Camera preview container with elliptical shape
                     Container(
-                      width: 270,
-                      height: 370,
-                      decoration: const BoxDecoration(
-                        borderRadius:
-                            BorderRadius.all(Radius.elliptical(270, 370)),
+                      width: 240,
+                      height: 340,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.only(
+                          topLeft: Radius.elliptical(120, 170),
+                          topRight: Radius.elliptical(120, 170),
+                          bottomLeft: Radius.elliptical(120, 170),
+                          bottomRight: Radius.elliptical(120, 170),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.3),
+                            blurRadius: 20,
+                            spreadRadius: 5,
+                          ),
+                        ],
                       ),
-                      child: ClipOval(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.only(
+                          topLeft: Radius.elliptical(120, 170),
+                          topRight: Radius.elliptical(120, 170),
+                          bottomLeft: Radius.elliptical(120, 170),
+                          bottomRight: Radius.elliptical(120, 170),
+                        ),
                         child: _isCameraInitialized &&
                                 _cameraController != null &&
                                 _cameraController!.value.isInitialized
-                            ? CameraPreview(_cameraController!)
-                            : const Center(child: CircularProgressIndicator()),
+                            ? Stack(
+                                children: [
+                                  // Camera preview - properly fitted within ellipse
+                                  Positioned.fill(
+                                    child: FittedBox(
+                                      fit: BoxFit.cover,
+                                      alignment: Alignment.center,
+                                      child: SizedBox(
+                                        width: _cameraController!.value.previewSize?.height ?? 400,
+                                        height: _cameraController!.value.previewSize?.width ?? 300,
+                                        child: CameraPreview(_cameraController!),
+                                      ),
+                                    ),
+                                  ),
+                                  // Face detection indicator
+                                  if (_isFaceDetected && !_isAuthenticating)
+                                    Container(
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.only(
+                                          topLeft: Radius.elliptical(120, 170),
+                                          topRight: Radius.elliptical(120, 170),
+                                          bottomLeft: Radius.elliptical(120, 170),
+                                          bottomRight: Radius.elliptical(120, 170),
+                                        ),
+                                        border: Border.all(
+                                          color: Colors.green,
+                                          width: 3,
+                                        ),
+                                      ),
+                                    ),
+                                  // Camera ready indicator
+                                  if (!_isFaceDetected && !_isAuthenticating)
+                                    Positioned(
+                                      bottom: 20,
+                                      left: 0,
+                                      right: 0,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black.withOpacity(0.7),
+                                          borderRadius: BorderRadius.circular(20),
+                                        ),
+                                        child: const Text(
+                                          'Position your face in the oval',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 12,
+                                          ),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              )
+                            : Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withOpacity(0.7),
+                                  borderRadius: BorderRadius.only(
+                                    topLeft: Radius.elliptical(120, 170),
+                                    topRight: Radius.elliptical(120, 170),
+                                    bottomLeft: Radius.elliptical(120, 170),
+                                    bottomRight: Radius.elliptical(120, 170),
+                                  ),
+                                ),
+                                child: const Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      CircularProgressIndicator(
+                                        color: Colors.white,
+                                      ),
+                                      SizedBox(height: 16),
+                                      Text(
+                                        'Initializing Camera...',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
                       ),
                     ),
                   ],

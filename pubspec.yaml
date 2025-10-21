@@ -1,5 +1,5 @@
 name: capstone2
-description: "A new Flutter project."
+description: "MarketSafe - Secure Marketplace with Face Recognition"
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -52,6 +52,8 @@ dependencies:
   shared_preferences: ^2.2.2
   video_player: ^2.9.2
   video_thumbnail: ^0.5.3
+  image: ^4.1.7
+  exif: ^3.3.0
 
 
 
@@ -82,8 +84,16 @@ flutter:
   uses-material-design: true
   assets:
     - assets/logo.png
+    - assets/logorelease.png
     - assets/faceicon.png
     - assets/facereadyicon.png
+    - assets/msbanner.jpg
+    - assets/accessories.jpg
+    - assets/electronics.jpg
+    - assets/furniture.jpg
+    - assets/mens wear.jpg
+    - assets/womens wear.jpg
+    - assets/vehicle.jpg
 
   fonts:
     - family: Plank

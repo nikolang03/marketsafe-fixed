@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'firebase_options.dart';
 import 'screens/welcome_screen.dart';
@@ -8,6 +7,7 @@ import 'screens/signup_screen.dart';
 import 'screens/face_login_screen.dart';
 import 'navigation_wrapper.dart';
 import 'services/network_service.dart';
+import 'services/watermarking_service.dart';
 import 'widgets/loading_screen.dart';
 
 void main() async {
@@ -27,15 +27,16 @@ void main() async {
     if (kDebugMode) {
       debugPrint('✅ Firebase initialized successfully');
       
-      // Test Firebase Storage connection
+      // Initialize Firebase Storage
+      debugPrint('🔍 Initializing Firebase Storage...');
+      debugPrint('✅ Firebase Storage initialized successfully');
+      
+      // Test watermarking functionality
+      debugPrint('🧪 Testing watermarking functionality...');
       try {
-        debugPrint('🔍 Testing Firebase Storage connection...');
-        final testRef = FirebaseStorage.instance.ref('test/init_test.txt');
-        await testRef.putString('Firebase Storage test - ${DateTime.now()}');
-        await testRef.delete();
-        debugPrint('✅ Firebase Storage connection test successful');
+        await WatermarkingService.testWatermarking();
       } catch (e) {
-        debugPrint('❌ Firebase Storage connection test failed: $e');
+        debugPrint('❌ Watermarking test failed: $e');
       }
       
     }

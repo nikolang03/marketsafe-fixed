@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'face_ready_screen.dart';
-import '../utils/responsive_utils.dart';
 
 class FaceVerificationScreen extends StatelessWidget {
   const FaceVerificationScreen({super.key});

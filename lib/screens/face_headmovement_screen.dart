@@ -8,9 +8,7 @@ import 'package:camera/camera.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:google_mlkit_commons/google_mlkit_commons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:firebase_storage/firebase_storage.dart';
-import 'package:firebase_core/firebase_core.dart';
-import '../services/face_recognition_service.dart';
+import '../services/real_face_recognition_service.dart';
 import '../services/face_uniqueness_service.dart';
 
 class FaceHeadMovementScreen extends StatefulWidget {
@@ -31,7 +29,8 @@ class _FaceHeadMovementScreenState extends State<FaceHeadMovementScreen> {
   bool _useImageStream = true;
   double _progressPercentage = 0.0;
   bool _hasCheckedFaceUniqueness = false;
-  Face? _lastDetectedFace; // Store the last detected face for feature extraction
+  Face? _lastDetectedFace;
+  CameraImage? _lastCameraImage; // Store last camera image for 128D embedding // Store the last detected face for feature extraction
 
   double? _initialX;
   bool _movedLeft = false;
@@ -206,7 +205,7 @@ class _FaceHeadMovementScreenState extends State<FaceHeadMovementScreen> {
       final faces = await _faceDetector.processImage(inputImage);
 
       if (faces.isNotEmpty) {
-        _detectHeadMovement(faces.first);
+        _detectHeadMovement(faces.first, image); // Pass camera image for 128D embedding
       } else {
         if (mounted) {
           setState(() {
@@ -228,14 +227,15 @@ class _FaceHeadMovementScreenState extends State<FaceHeadMovementScreen> {
     }
   }
 
-  void _detectHeadMovement(Face face) async {
-    // Store the face for feature extraction
+  void _detectHeadMovement(Face face, [CameraImage? cameraImage]) async {
+    // Store the face and camera image for feature extraction
     _lastDetectedFace = face;
+    _lastCameraImage = cameraImage; // Store camera image for 128D embedding
     
     // Check face uniqueness on first detection
     if (!_hasCheckedFaceUniqueness && _progressPercentage == 0.0) {
       final isFaceAlreadyRegistered =
-          await FaceUniquenessService.isFaceAlreadyRegistered(face);
+          await FaceUniquenessService.isFaceAlreadyRegistered(face, _lastCameraImage);
       if (isFaceAlreadyRegistered) {
         if (mounted) {
           _showFaceAlreadyRegisteredDialog();
@@ -342,12 +342,13 @@ class _FaceHeadMovementScreenState extends State<FaceHeadMovementScreen> {
           await prefs.setString('face_verification_headMovementMetrics', 
             '{"leftMovement": $_movedLeft, "rightMovement": $_movedRight, "completionTime": "${DateTime.now().toIso8601String()}"}');
           
-          // Store face features for recognition
+          // Store face features for recognition using 128D embeddings
           if (_lastDetectedFace != null) {
-            final faceFeatures = FaceRecognitionService.extractFaceFeatures(_lastDetectedFace!);
+            print('🔍 Extracting 128D face features from last detected face...');
+            final faceFeatures = await RealFaceRecognitionService.extractBiometricFeatures(_lastDetectedFace!, _lastCameraImage);
             final featuresString = faceFeatures.map((f) => f.toString()).join(',');
             await prefs.setString('face_verification_headMovementFeatures', featuresString);
-            print('✅ Face features extracted and saved: ${faceFeatures.length} dimensions');
+            print('✅ 128D face features extracted and saved: ${faceFeatures.length} dimensions');
           }
           
           print('✅ Head movement verification data saved to SharedPreferences successfully');

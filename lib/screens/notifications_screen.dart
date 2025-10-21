@@ -4,7 +4,6 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 import '../services/notification_service.dart';
-import '../services/approval_notification_service.dart';
 import '../services/badge_update_service.dart';
 
 class NotificationsScreen extends StatefulWidget {

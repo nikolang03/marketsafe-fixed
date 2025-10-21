@@ -4,7 +4,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'face_recognition_service.dart';
+import 'real_face_recognition_service.dart';
+import 'watermarking_service.dart';
 
 class ProfilePhotoVerificationService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instanceFor(
@@ -129,9 +130,9 @@ class ProfilePhotoVerificationService {
       }
 
       final userData = userDoc.data()!;
-      final storedFaceFeatures = userData['faceFeatures'];
+      final storedBiometricFeatures = userData['biometricFeatures'];
 
-      if (storedFaceFeatures == null) {
+      if (storedBiometricFeatures == null) {
         return ProfilePhotoVerificationResult(
           success: false,
           error: 'No face data found for this user. Please complete face verification first.',
@@ -140,20 +141,33 @@ class ProfilePhotoVerificationService {
       }
 
       // Extract features from the uploaded photo
-      final detectedFeatures = FaceRecognitionService.extractFaceFeatures(detectedFace);
+      final detectedFeatures = await RealFaceRecognitionService.extractBiometricFeatures(detectedFace);
       
-      // Handle different face features formats
+      // Handle biometric features format with fallback to face features
       List<double> storedFeatures = [];
       
-      if (storedFaceFeatures is Map && storedFaceFeatures.containsKey('featureVector')) {
-        // New format: {featureVector: [...], featureCount: 128, ...}
-        final featureVector = storedFaceFeatures['featureVector'];
-        if (featureVector is List) {
-          storedFeatures = featureVector.cast<double>();
+      if (storedBiometricFeatures is Map && storedBiometricFeatures.containsKey('biometricSignature')) {
+        // New format: {biometricSignature: [...], featureCount: 64, ...}
+        final biometricSignature = storedBiometricFeatures['biometricSignature'];
+        if (biometricSignature is List) {
+          storedFeatures = biometricSignature.cast<double>();
+          print('📊 Using biometric signature: ${storedFeatures.length} features');
         }
-      } else if (storedFaceFeatures is List) {
+      } else if (storedBiometricFeatures is List) {
         // Old format: direct list of features
-        storedFeatures = storedFaceFeatures.cast<double>();
+        storedFeatures = storedBiometricFeatures.cast<double>();
+        print('📊 Using direct biometric features: ${storedFeatures.length} features');
+      } else {
+        // Fallback to face features if biometric features not available
+        print('⚠️ No biometric features found, checking face features...');
+        final faceFeatures = userData['faceFeatures'];
+        if (faceFeatures is String) {
+          final faceFeaturesList = faceFeatures.split(',').map((e) => double.tryParse(e) ?? 0.0).toList();
+          if (faceFeaturesList.isNotEmpty) {
+            storedFeatures = faceFeaturesList;
+            print('📊 Using legacy face features: ${storedFeatures.length} features');
+          }
+        }
       }
 
       if (storedFeatures.isEmpty) {
@@ -164,19 +178,22 @@ class ProfilePhotoVerificationService {
         );
       }
 
+      // Use a strict threshold for profile photos (security is important)
+      const double verificationThreshold = 0.7; // 70% similarity required (strict)
+      
       // Calculate similarity
-      final similarity = FaceRecognitionService.calculateSimilarity(
+      final similarity = RealFaceRecognitionService.calculateBiometricSimilarity(
         detectedFeatures, 
         storedFeatures,
       );
-
+      
       print('📊 Face similarity calculation:');
       print('   - Detected features: ${detectedFeatures.length}');
       print('   - Stored features: ${storedFeatures.length}');
       print('   - Similarity score: $similarity');
-
-      // Use a higher threshold for profile photo verification (more strict)
-      const double verificationThreshold = 0.6; // 60% similarity required
+      print('   - Threshold required: $verificationThreshold');
+      print('   - Sample detected features: ${detectedFeatures.take(3).toList()}');
+      print('   - Sample stored features: ${storedFeatures.take(3).toList()}');
       
       if (similarity >= verificationThreshold) {
         return ProfilePhotoVerificationResult(
@@ -216,15 +233,72 @@ class ProfilePhotoVerificationService {
       final fileSize = await file.length();
       print('📏 Profile photo file size: $fileSize bytes');
       
+      // Get username for watermarking
+      String username = 'user_$userId';
+      try {
+        final userDoc = await _firestore.collection('users').doc(userId).get();
+        final userData = userDoc.data();
+        if (userData != null && userData['username'] != null) {
+          username = userData['username'];
+        }
+      } catch (e) {
+        print('⚠️ Could not get username for watermarking: $e');
+      }
+      
+      // Validate image authenticity and add watermark
+      print('🎨 Adding watermark and metadata to profile photo for user: $username');
+      final fileBytes = await file.readAsBytes();
+      
+      // Check if image is from internet
+      final isFromInternet = await WatermarkingService.isImageFromInternet(fileBytes);
+      if (isFromInternet) {
+        throw Exception('Profile photos from internet/web are not allowed. Please use images taken with your device camera.');
+      }
+      
+      // Validate image authenticity
+      final validationResult = await WatermarkingService.validateImageAuthenticity(
+        imageBytes: fileBytes,
+        username: username,
+        userId: userId,
+      );
+      
+      if (!validationResult['isAuthentic'] && validationResult['warnings'].isNotEmpty) {
+        print('⚠️ Profile photo authenticity warnings: ${validationResult['warnings']}');
+        // Continue with upload but log warnings
+      }
+      
+      final watermarkedBytes = await WatermarkingService.addWatermarkToImage(
+        imageBytes: fileBytes,
+        username: username,
+        userId: userId,
+        customText: '@$username',
+        customPosition: WatermarkPosition.center,
+        customSize: 0.8,
+        customOpacity: 0.9,
+        customColor: WatermarkColor.yellow,
+      );
+      print('✅ Watermark and metadata added to profile photo successfully');
+      
       // Create unique filename with timestamp
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final ref = _storage.ref().child('profile_photos/$userId/profile_$timestamp.jpg');
       
-      print('☁️ Uploading to Firebase Storage path: ${ref.fullPath}');
-      final uploadTask = await ref.putFile(file);
+      // Set metadata
+      final metadata = SettableMetadata(
+        contentType: 'image/jpeg',
+        customMetadata: {
+          'userId': userId,
+          'uploadedAt': DateTime.now().toIso8601String(),
+          'watermarked': 'true',
+          'username': username,
+        },
+      );
+      
+      print('☁️ Uploading watermarked profile photo to Firebase Storage path: ${ref.fullPath}');
+      final uploadTask = await ref.putData(watermarkedBytes, metadata);
       final downloadUrl = await uploadTask.ref.getDownloadURL();
       
-      print('🎉 Profile photo upload completed. Download URL: $downloadUrl');
+      print('🎉 Watermarked profile photo upload completed. Download URL: $downloadUrl');
       return downloadUrl;
     } catch (e) {
       print('💥 Profile photo upload failed: $e');
@@ -254,11 +328,11 @@ class ProfilePhotoVerificationService {
       if (!userDoc.exists) return false;
       
       final userData = userDoc.data()!;
-      final faceFeatures = userData['faceFeatures'];
+      final biometricFeatures = userData['biometricFeatures'];
       final faceData = userData['faceData'];
       
-      // Check if user has face features stored
-      bool hasFaceFeatures = faceFeatures != null;
+      // Check if user has biometric features stored
+      bool hasBiometricFeatures = biometricFeatures != null;
       
       // Check if user has completed face verification steps
       bool hasCompletedVerification = faceData != null &&
@@ -266,7 +340,7 @@ class ProfilePhotoVerificationService {
           faceData['moveCloserCompleted'] == true &&
           faceData['headMovementCompleted'] == true;
       
-      return hasFaceFeatures && hasCompletedVerification;
+      return hasBiometricFeatures && hasCompletedVerification;
     } catch (e) {
       print('❌ Error checking face verification status: $e');
       return false;

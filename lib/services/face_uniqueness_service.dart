@@ -1,7 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
-import 'face_recognition_service.dart';
+import 'package:camera/camera.dart';
+import 'real_face_recognition_service.dart';
 
 class FaceUniquenessService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instanceFor(
@@ -46,12 +47,12 @@ class FaceUniquenessService {
   }
 
   // Check if a face is already registered with any user
-  static Future<bool> isFaceAlreadyRegistered(Face face) async {
+  static Future<bool> isFaceAlreadyRegistered(Face face, [CameraImage? cameraImage]) async {
     try {
-      print('🔍 Checking face uniqueness using new face recognition system...');
+      print('🔍 Checking face uniqueness using 128D face recognition system...');
       
-      // Use the new face recognition system to find existing users
-      final existingUserId = await FaceRecognitionService.findUserByFace(face);
+      // Use the new 128D face recognition system to find existing users
+      final existingUserId = await RealFaceRecognitionService.findUserByRealFace(face, cameraImage);
       
       if (existingUserId != null) {
         print('❌ Face already registered with user: $existingUserId');

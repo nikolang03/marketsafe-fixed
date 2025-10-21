@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import '../models/product_model.dart';
 import '../screens/edit_product_screen.dart';
+import '../screens/product_preview_screen.dart';
 import '../services/product_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'image_swiper.dart';
@@ -79,8 +80,15 @@ class _ProductCardState extends State<ProductCard> {
 
   Future<String?> _getCurrentUserId() async {
     final prefs = await SharedPreferences.getInstance();
-    final userId = prefs.getString('current_user_id') ?? 
-                   prefs.getString('signup_user_id');
+    final currentUserId = prefs.getString('current_user_id');
+    final signupUserId = prefs.getString('signup_user_id');
+    final userId = currentUserId ?? signupUserId;
+    
+    print('🔍 ProductCard: Getting current user ID:');
+    print('  - current_user_id: $currentUserId');
+    print('  - signup_user_id: $signupUserId');
+    print('  - Final userId: $userId');
+    
     setState(() {
       _currentUserId = userId;
     });
@@ -342,6 +350,72 @@ class _ProductCardState extends State<ProductCard> {
         ),
       );
     }
+  }
+
+  // Navigate to product preview screen
+  void _navigateToProductPreview() async {
+    // Get current user ID directly if not available
+    String? userId = _currentUserId;
+    if (userId == null || userId.isEmpty) {
+      print('🔍 ProductCard: _currentUserId is null/empty, fetching directly...');
+      userId = await _getCurrentUserId();
+      print('🔍 ProductCard: Direct fetch result: $userId');
+    }
+    
+    if (userId == null || userId.isEmpty) {
+      print('❌ ProductCard: Current user ID is null or empty, cannot navigate to product preview');
+      print('  - _currentUserId: $_currentUserId');
+      print('  - Direct fetch result: $userId');
+      return;
+    }
+    
+    print('🔍 ProductCard: Navigating to product preview');
+    print('  - Current User ID: $userId');
+    print('  - Product ID: ${_currentProduct.id}');
+    print('  - Seller ID: ${_currentProduct.sellerId}');
+    
+    // Convert Product to Map for ProductPreviewScreen
+    final productMap = {
+      'id': _currentProduct.id,
+      'title': _currentProduct.title,
+      'price': _currentProduct.price.toString(),
+      'description': _currentProduct.description,
+      'details': _currentProduct.description,
+      'date': _formatProductDate(_currentProduct.createdAt),
+      'userId': _currentProduct.sellerId,
+      'sellerName': _currentProduct.sellerName,
+      'imageUrls': _currentProduct.imageUrls,
+      'videoUrl': _currentProduct.videoUrl,
+      'videoThumbnailUrl': _currentProduct.videoThumbnailUrl,
+      'mediaType': _currentProduct.mediaType,
+    };
+    
+    print('  - Product Map: $productMap');
+    
+    print('🔍 ProductCard: About to navigate to ProductPreviewScreen');
+    print('  - Passing currentUserId: $userId');
+    
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ProductPreviewScreen(
+          product: productMap,
+          currentUserId: userId!,
+        ),
+      ),
+    );
+  }
+
+  // Format date for product display
+  String _formatProductDate(DateTime? date) {
+    if (date == null) return 'Unknown Date';
+    
+    final months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    
+    return '${months[date.month - 1]} ${date.day} ${date.year}';
   }
 
   // Show video player dialog
@@ -607,7 +681,7 @@ class _ProductCardState extends State<ProductCard> {
                         foregroundColor: Colors.white,
                         side: const BorderSide(color: Colors.white54),
                       ),
-                      onPressed: () {},
+                      onPressed: () => _navigateToProductPreview(),
                       child: const Text("MAKE OFFER"),
                     ),
                     const SizedBox(width: 10),

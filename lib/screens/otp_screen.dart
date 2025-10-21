@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'add_profile_photo_screen.dart';
 import '../services/admin_sync_service.dart';
 import 'face_instruction_screen.dart';
 

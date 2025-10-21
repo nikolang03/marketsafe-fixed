@@ -2,8 +2,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/product_service.dart';
+import '../services/image_metadata_service.dart';
 import '../navigation_wrapper.dart';
+import 'watermark_preview_screen.dart';
 
 class PostDetailsScreen extends StatefulWidget {
   const PostDetailsScreen({super.key});
@@ -421,9 +424,8 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
       );
       
       if (photo != null) {
-        setState(() {
-          _mediaFiles.add(File(photo.path));
-        });
+        // Verify image metadata before adding
+        await _verifyAndAddImage(File(photo.path));
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -456,15 +458,18 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
       final remainingSlots = 10 - _mediaFiles.length;
       final filesToAdd = pickedFiles.take(remainingSlots).toList();
       
-      setState(() {
-        _mediaFiles.addAll(filesToAdd.map((file) => File(file.path)));
-      });
+      // Verify each image before adding
+      int addedCount = 0;
+      for (final file in filesToAdd) {
+        final success = await _verifyAndAddImage(File(file.path));
+        if (success) addedCount++;
+      }
       
-      print('✅ Added ${filesToAdd.length} images. Total: ${_mediaFiles.length}');
+      print('✅ Added $addedCount out of ${filesToAdd.length} images. Total: ${_mediaFiles.length}');
       
       if (pickedFiles.length > remainingSlots) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Only ${remainingSlots} photos added. Maximum 10 items allowed.')),
+          SnackBar(content: Text('Only ${remainingSlots} photos processed. Maximum 10 items allowed.')),
         );
       }
     } else {
@@ -472,7 +477,115 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
     }
   }
 
+  /// Verify image metadata and add to media files if valid
+  Future<bool> _verifyAndAddImage(File imageFile) async {
+    try {
+      print('🔍 Verifying image metadata: ${imageFile.path}');
+      
+      // Show loading indicator
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
 
+      // Verify image metadata
+      final verificationResult = await ImageMetadataService.verifyImageOriginality(imageFile);
+      
+      // Hide loading indicator
+      Navigator.of(context).pop();
+
+      if (verificationResult.isValid) {
+        // Image is valid, show watermark preview
+        print('✅ Image verified, showing watermark preview');
+        print('📸 Image path: ${imageFile.path}');
+        print('📸 Image size: ${await imageFile.length()} bytes');
+        await _showWatermarkPreview(imageFile);
+        return true;
+      } else {
+        // Image failed verification, show error dialog
+        print('❌ Image verification failed: ${verificationResult.reason}');
+        print('📸 Image path: ${imageFile.path}');
+        print('📸 Image size: ${await imageFile.length()} bytes');
+        _showImageVerificationError(verificationResult);
+        return false;
+      }
+    } catch (e) {
+      // Hide loading indicator if still showing
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+      
+      print('❌ Error verifying image: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error verifying image: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return false;
+    }
+  }
+
+  /// Show image verification error dialog with helpful suggestions
+  void _showImageVerificationError(ImageVerificationResult result) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.warning, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Image Verification Failed'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              result.reason,
+              style: TextStyle(fontSize: 16),
+            ),
+            if (result.suggestions.isNotEmpty) ...[
+              SizedBox(height: 16),
+              Text(
+                'Suggestions:',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
+              ),
+              SizedBox(height: 8),
+              ...result.suggestions.map((suggestion) => Padding(
+                padding: EdgeInsets.only(bottom: 4),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('• ', style: TextStyle(fontSize: 14)),
+                    Expanded(
+                      child: Text(
+                        suggestion,
+                        style: TextStyle(fontSize: 14),
+                      ),
+                    ),
+                  ],
+                ),
+              )),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
 
   // Unified media viewer that handles both photos and videos
   Widget _buildUnifiedMediaViewer() {
@@ -1245,5 +1358,53 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
         ),
       ),
     );
+  }
+
+  /// Show watermark preview screen for image positioning
+  Future<void> _showWatermarkPreview(File imageFile) async {
+    try {
+      // Get current user info
+      final prefs = await SharedPreferences.getInstance();
+      final username = prefs.getString('current_user_name') ?? 
+                      prefs.getString('signup_user_name') ?? 
+                      'User${DateTime.now().millisecondsSinceEpoch}';
+      final userId = prefs.getString('current_user_id') ?? 
+                     prefs.getString('signup_user_id') ?? 
+                     'unknown';
+
+      print('👤 Username for watermark: $username');
+      print('🆔 User ID for watermark: $userId');
+
+      // Show watermark preview screen
+      final result = await Navigator.push<String>(
+        context,
+        MaterialPageRoute(
+          builder: (context) => WatermarkPreviewScreen(
+            imagePath: imageFile.path,
+            username: username,
+            userId: userId,
+            onWatermarkApplied: (watermarkedImagePath) {
+              // Add the watermarked image to media files
+              setState(() {
+                _mediaFiles.add(File(watermarkedImagePath));
+              });
+              print('✅ Watermarked image added to media files');
+            },
+          ),
+        ),
+      );
+
+      if (result != null) {
+        print('✅ Watermark preview completed: $result');
+      }
+    } catch (e) {
+      print('❌ Error showing watermark preview: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error showing watermark preview: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 }

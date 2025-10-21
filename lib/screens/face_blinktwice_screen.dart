@@ -7,12 +7,9 @@ import 'package:camera/camera.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:google_mlkit_commons/google_mlkit_commons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'face_movecloser_screen.dart';
 import '../services/face_uniqueness_service.dart';
-import '../services/face_recognition_service.dart';
+import '../services/real_face_recognition_service.dart';
 
 class FaceScanScreen extends StatefulWidget {
   const FaceScanScreen({super.key});
@@ -36,7 +33,8 @@ class _FaceScanScreenState extends State<FaceScanScreen> {
   double _progressPercentage = 0.0;
   int _blinkCount = 0;
   bool _hasCheckedFaceUniqueness = false;
-  Face? _lastDetectedFace; // Store the last detected face for feature extraction
+  Face? _lastDetectedFace;
+  CameraImage? _lastCameraImage; // Store last camera image for 128D embedding // Store the last detected face for feature extraction
 
 
   @override
@@ -201,7 +199,7 @@ class _FaceScanScreenState extends State<FaceScanScreen> {
 
       if (faces.isNotEmpty) {
         print('👤 Processing first face for blink detection');
-        _detectBlink(faces.first);
+        _detectBlink(faces.first, image); // Pass camera image for 128D embedding
       } else {
         print('❌ No faces detected');
         if (mounted) {
@@ -225,7 +223,7 @@ class _FaceScanScreenState extends State<FaceScanScreen> {
     }
   }
 
-  void _detectBlink(Face face) async {
+  void _detectBlink(Face face, [CameraImage? cameraImage]) async {
     final leftProb = face.leftEyeOpenProbability;
     final rightProb = face.rightEyeOpenProbability;
 
@@ -233,8 +231,9 @@ class _FaceScanScreenState extends State<FaceScanScreen> {
       return;
     }
 
-    // Store the face for feature extraction
+    // Store the face and camera image for feature extraction
     _lastDetectedFace = face;
+    _lastCameraImage = cameraImage; // Store camera image for 128D embedding
 
     print('👁️ Eye probabilities - Left: $leftProb, Right: $rightProb, Blink count: $_blinkCount');
 
@@ -242,7 +241,7 @@ class _FaceScanScreenState extends State<FaceScanScreen> {
     if (!_hasCheckedFaceUniqueness && _blinkCount == 0 && _progressPercentage == 0.0) {
       _hasCheckedFaceUniqueness = true;
       final isFaceAlreadyRegistered =
-          await FaceUniquenessService.isFaceAlreadyRegistered(face);
+          await FaceUniquenessService.isFaceAlreadyRegistered(face, _lastCameraImage);
       if (isFaceAlreadyRegistered) {
         if (mounted) {
           _showFaceAlreadyRegisteredDialog();
@@ -358,14 +357,14 @@ class _FaceScanScreenState extends State<FaceScanScreen> {
         await prefs.setString('face_verification_blinkMetrics', 
           '{"blinkCount": $_blinkCount, "completionTime": "${DateTime.now().toIso8601String()}"}');
         
-        // Store face features for recognition
+        // Store real biometric features for recognition
         if (_lastDetectedFace != null) {
-          print('🔍 Extracting face features from last detected face...');
-          final faceFeatures = FaceRecognitionService.extractFaceFeatures(_lastDetectedFace!);
-          final featuresString = faceFeatures.map((f) => f.toString()).join(',');
+          print('🔍 Extracting REAL biometric features from last detected face...');
+          final biometricFeatures = await RealFaceRecognitionService.extractBiometricFeatures(_lastDetectedFace!, _lastCameraImage);
+          final featuresString = biometricFeatures.map((f) => f.toString()).join(',');
           await prefs.setString('face_verification_blinkFeatures', featuresString);
-          print('✅ Face features extracted and saved: ${faceFeatures.length} dimensions');
-          print('📊 Sample features: ${faceFeatures.take(5).toList()}');
+          print('✅ REAL biometric features extracted and saved: ${biometricFeatures.length} dimensions');
+          print('📊 Sample features: ${biometricFeatures.take(5).toList()}');
         } else {
           print('⚠️ No face detected to extract features from');
         }

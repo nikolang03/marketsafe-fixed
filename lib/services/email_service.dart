@@ -65,8 +65,8 @@ class EmailService {
       print('✅ OTP sent successfully to $email');
       print('Send report: $sendReport');
       
-      // Always show OTP in console for development/testing
-      print('=== OTP FOR DEVELOPMENT/TESTING ===');
+      // Log OTP for debugging
+      print('=== OTP GENERATED ===');
       print('Email: $email');
       print('OTP Code: $otp');
       print('====================================');

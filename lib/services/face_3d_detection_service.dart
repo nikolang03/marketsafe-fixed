@@ -186,10 +186,17 @@ class Face3DDetectionService {
       List<BiometricType> availableBiometrics = await _localAuth.getAvailableBiometrics();
       print('🔍 Available biometrics for authentication: $availableBiometrics');
       
-      // If no biometrics are available, simulate 3D detection for devices without hardware
+      // If no biometrics are available, return failure
       if (availableBiometrics.isEmpty) {
-        print('⚠️ No biometric hardware detected - using simulated 3D detection');
-        return _simulate3DDetection();
+        print('⚠️ No biometric hardware detected - 3D detection not available');
+        return {
+          'success': false,
+          'is3D': false,
+          'confidence': 0.0,
+          'faceDetected': false,
+          'livenessScore': 0,
+          'message': '❌ 3D face detection not available on this device',
+        };
       }
       
       // Use local_auth to perform real biometric authentication
@@ -227,10 +234,17 @@ class Face3DDetectionService {
     } catch (e) {
       print('❌ REAL 3D biometric authentication error: $e');
       
-      // Check if it's a "not available" error and use simulation
+      // Check if it's a "not available" error
       if (e.toString().contains('NotAvailable')) {
-        print('⚠️ Biometric not available - falling back to simulated 3D detection');
-        return _simulate3DDetection();
+        print('⚠️ Biometric not available - 3D detection not supported');
+        return {
+          'success': false,
+          'is3D': false,
+          'confidence': 0.0,
+          'faceDetected': false,
+          'livenessScore': 0,
+          'message': '❌ 3D face detection not supported on this device',
+        };
       }
       
       return {
@@ -244,36 +258,6 @@ class Face3DDetectionService {
     }
   }
   
-  // Simulate 3D detection for devices without biometric hardware
-  Map<String, dynamic> _simulate3DDetection() {
-    print('🎭 Simulating 3D face detection for device without biometric hardware');
-    
-    // Simulate realistic 3D detection with some randomness
-    final random = DateTime.now().millisecondsSinceEpoch % 100;
-    final success = random > 20; // 80% success rate
-    
-    if (success) {
-      print('✅ Simulated 3D face detection successful!');
-      return {
-        'success': true,
-        'is3D': true,
-        'confidence': 0.85 + (random / 1000), // 0.85-0.95
-        'faceDetected': true,
-        'livenessScore': 80 + (random % 20), // 80-99
-        'message': '🚀 Simulated 3D Face verification successful!',
-      };
-    } else {
-      print('❌ Simulated 3D face detection failed');
-      return {
-        'success': false,
-        'is3D': true,
-        'confidence': 0.0,
-        'faceDetected': false,
-        'livenessScore': 0,
-        'message': '❌ Simulated 3D Face verification failed',
-      };
-    }
-  }
   
   
   

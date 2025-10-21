@@ -1,7 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
-import 'face_recognition_service.dart';
+import 'package:camera/camera.dart';
+import 'real_face_recognition_service.dart';
 
 class FaceLoginService {
   static final FirebaseFirestore _firestore =
@@ -43,45 +44,51 @@ class FaceLoginService {
   }
 
   // Authenticate user using face detection
-  // Replace the authenticateUser method (lines 46-88) with:
-static Future<String?> authenticateUser(Face detectedFace) async {
-  try {
-    print('🔒 Starting SECURE face authentication...');
-    
-    // Use the secure face recognition service
-    final result = await FaceRecognitionService.findUserByFace(detectedFace);
-    
-    // Handle liveness detection failure
-    if (result == "LIVENESS_FAILED") {
-      print('❌ Liveness detection failed');
-      return "LIVENESS_FAILED";
-    }
-    
-    // Handle successful user match
-    if (result != null) {
-      // Check if user is verified
-      final userDoc = await _firestore.collection('users').doc(result).get();
-      final verificationStatus = userDoc.data()?['verificationStatus'] ?? 'pending';
+  // Real face authentication using actual biometric data
+  static Future<String?> authenticateUserWithRealBiometrics(Face detectedFace, [CameraImage? cameraImage]) async {
+    try {
+      print('🔒 Starting REAL biometric face authentication...');
       
-      if (verificationStatus != 'verified') {
-        return 'PENDING_VERIFICATION:$result';
+      // Use the real face recognition service
+      final result = await RealFaceRecognitionService.findUserByRealFace(detectedFace, cameraImage);
+      
+      // Handle liveness detection failure
+      if (result == "LIVENESS_FAILED") {
+        print('❌ Real liveness detection failed');
+        return "LIVENESS_FAILED";
       }
       
-      // Update last login time
-      await _firestore.collection('users').doc(result).update({
-        'lastLoginAt': FieldValue.serverTimestamp(),
-      });
+      // Handle successful user match
+      if (result != null) {
+        // Check if user is verified
+        final userDoc = await _firestore.collection('users').doc(result).get();
+        final verificationStatus = userDoc.data()?['verificationStatus'] ?? 'pending';
+        
+        if (verificationStatus != 'verified') {
+          return 'PENDING_VERIFICATION:$result';
+        }
+        
+        // Update last login time
+        await _firestore.collection('users').doc(result).update({
+          'lastLoginAt': FieldValue.serverTimestamp(),
+        });
+        
+        return result;
+      }
       
-      return result;
+      print('❌ No matching user found with real biometric authentication');
+      return null;
+      
+    } catch (e) {
+      print('❌ Real face authentication error: $e');
+      throw Exception('Real face authentication failed: $e');
     }
-    
-    print('❌ No matching user found with sufficient similarity');
-    return null;
-  } catch (e) {
-    print('❌ Face authentication error: $e');
-    throw Exception('Face authentication failed: $e');
   }
-}
+
+  // Main authentication method - now uses only real biometrics
+  static Future<String?> authenticateUser(Face detectedFace, [CameraImage? cameraImage]) async {
+    return await authenticateUserWithRealBiometrics(detectedFace, cameraImage);
+  }
 
 
   // Get user data by ID

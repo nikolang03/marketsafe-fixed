@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'face_blinktwice_screen.dart';
-import '../utils/responsive_utils.dart';
 
 class FaceReadyScreen extends StatelessWidget {
   const FaceReadyScreen({super.key});

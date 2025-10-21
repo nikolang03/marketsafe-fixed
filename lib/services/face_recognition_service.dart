@@ -1,19 +1,29 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
+import 'package:camera/camera.dart';
 import 'dart:math';
+import 'real_face_recognition_service.dart';
 
 // Configuration class for face recognition sensitivity
 class FaceRecognitionConfig {
-  // Similarity threshold (0.0 to 1.0) - higher = more strict
-  static const double similarityThreshold = 0.85;
+  // Multi-layer security thresholds - Made more lenient for better authentication success
+  static const double primarySimilarityThreshold = 0.75;  // Primary threshold (more lenient)
+  static const double strictSimilarityThreshold = 0.90;   // Strict threshold for high security
+  static const double friendRejectionThreshold = 0.70;    // Threshold to reject friends (lowered)
+  static const double friendRejectionUpper = 0.98;        // Upper bound of friend similarity band (expanded)
+  static const double confidenceThreshold = 0.60;          // Confidence level for decision (lowered)
   
   // Simple liveness detection (blink-based)
-  static const double minEyeOpenProbability = 0.5; // Minimum eye open probability for basic liveness
+  static const double minEyeOpenProbability = 0.3; // Minimum eye open probability for basic liveness (lowered)
   
   // Similarity calculation weights
-  static const double cosineWeight = 0.7; // Weight for cosine similarity
-  static const double euclideanWeight = 0.3; // Weight for Euclidean similarity
+  static const double cosineWeight = 0.8; // Weight for cosine similarity (increased)
+  static const double euclideanWeight = 0.2; // Weight for Euclidean similarity (decreased)
+  
+  // Face embedding configuration
+  static const int embeddingSize = 128; // 128D embeddings for better accuracy
+  static const bool useDeepLearningEmbeddings = true; // Use 128D embeddings instead of landmarks
 }
 
 class FaceRecognitionService {
@@ -28,132 +38,48 @@ class FaceRecognitionService {
   static const int _requiredBlinks = 2; // Number of blinks required for liveness
   static const int _maxSequenceLength = 10; // Maximum sequence length to track
 
-  // Extract face features/embeddings from a detected face
-  static List<double> extractFaceFeatures(Face face) {
+  // Extract 128D face features/embeddings from a detected face
+  static Future<List<double>> extractFaceFeatures(Face face, [CameraImage? cameraImage]) async {
     try {
-      print('🔍 FaceRecognitionService: Extracting features from face...');
-      // Use face landmarks and bounding box to create a feature vector
-      // This is a simplified approach - in a real system, you'd use a proper face embedding model
+      print('🔍 FaceRecognitionService: Extracting 128D face features...');
       
-      final boundingBox = face.boundingBox;
-      final landmarks = face.landmarks;
-      
-      print('📏 Face bounding box: $boundingBox');
-      print('🎯 Face landmarks count: ${landmarks.length}');
-      
-      List<double> features = [];
-      
-      // Add bounding box features
-      features.add(boundingBox.left.toDouble());
-      features.add(boundingBox.top.toDouble());
-      features.add(boundingBox.width.toDouble());
-      features.add(boundingBox.height.toDouble());
-      features.add(boundingBox.center.dx);
-      features.add(boundingBox.center.dy);
-      
-      // Add head pose features
-      features.add(face.headEulerAngleX ?? 0.0);
-      features.add(face.headEulerAngleY ?? 0.0);
-      features.add(face.headEulerAngleZ ?? 0.0);
-      
-      // Add eye features
-      features.add(face.leftEyeOpenProbability ?? 0.0);
-      features.add(face.rightEyeOpenProbability ?? 0.0);
-      features.add(face.smilingProbability ?? 0.0);
-      
-      // Add landmark features if available
-      if (landmarks.containsKey(FaceLandmarkType.leftEye)) {
-        final leftEye = landmarks[FaceLandmarkType.leftEye]!;
-        features.add(leftEye.position.x.toDouble());
-        features.add(leftEye.position.y.toDouble());
+      if (FaceRecognitionConfig.useDeepLearningEmbeddings) {
+        // Always use 128D deep learning embeddings for better accuracy
+        print('🧠 Using 128D deep learning embeddings...');
+        
+        if (cameraImage != null) {
+          // Use camera image for better embedding quality
+          final embedding = await RealFaceRecognitionService.extractBiometricFeatures(face, cameraImage);
+          print('✅ Generated ${embedding.length}D face embedding from camera image');
+          return embedding;
+        } else {
+          // Generate 128D embedding without camera image (using face landmarks)
+          print('⚠️ No camera image available, generating 128D embedding from face landmarks...');
+          final embedding = await RealFaceRecognitionService.extractBiometricFeatures(face, null);
+          print('✅ Generated ${embedding.length}D face embedding from landmarks');
+          return embedding;
+        }
       } else {
-        features.add(0.0);
-        features.add(0.0);
+        throw Exception('Deep learning embeddings are required but disabled in configuration');
       }
-      
-      if (landmarks.containsKey(FaceLandmarkType.rightEye)) {
-        final rightEye = landmarks[FaceLandmarkType.rightEye]!;
-        features.add(rightEye.position.x.toDouble());
-        features.add(rightEye.position.y.toDouble());
-      } else {
-        features.add(0.0);
-        features.add(0.0);
-      }
-      
-      if (landmarks.containsKey(FaceLandmarkType.noseBase)) {
-        final nose = landmarks[FaceLandmarkType.noseBase]!;
-        features.add(nose.position.x.toDouble());
-        features.add(nose.position.y.toDouble());
-      } else {
-        features.add(0.0);
-        features.add(0.0);
-      }
-      
-      if (landmarks.containsKey(FaceLandmarkType.leftCheek)) {
-        final leftCheek = landmarks[FaceLandmarkType.leftCheek]!;
-        features.add(leftCheek.position.x.toDouble());
-        features.add(leftCheek.position.y.toDouble());
-      } else {
-        features.add(0.0);
-        features.add(0.0);
-      }
-      
-      if (landmarks.containsKey(FaceLandmarkType.rightCheek)) {
-        final rightCheek = landmarks[FaceLandmarkType.rightCheek]!;
-        features.add(rightCheek.position.x.toDouble());
-        features.add(rightCheek.position.y.toDouble());
-      } else {
-        features.add(0.0);
-        features.add(0.0);
-      }
-      
-      // Normalize features to make them more comparable
-      final normalizedFeatures = _normalizeFeatures(features);
-      print('✅ FaceRecognitionService: Extracted ${normalizedFeatures.length} features');
-      print('📊 Sample normalized features: ${normalizedFeatures.take(5).toList()}');
-      return normalizedFeatures;
     } catch (e) {
-      print('❌ Error extracting face features: $e');
-      return List.filled(20, 0.0); // Return default features
+      print('❌ FaceRecognitionService: Error extracting 128D face features: $e');
+      throw Exception('Failed to extract 128D face features: $e');
     }
   }
   
-  // Normalize features to 0-1 range with improved robustness
-  static List<double> _normalizeFeatures(List<double> features) {
-    if (features.isEmpty) return features;
-    
-    // Use robust normalization that handles outliers better
-    List<double> sortedFeatures = List.from(features)..sort();
-    int length = sortedFeatures.length;
-    
-    // Use percentiles instead of min/max for more robust normalization
-    double q25 = sortedFeatures[(length * 0.25).floor()];
-    double q75 = sortedFeatures[(length * 0.75).floor()];
-    double iqr = q75 - q25;
-    
-    // If IQR is too small, use standard min/max normalization
-    if (iqr < 0.001) {
-      double maxVal = features.reduce(max);
-      double minVal = features.reduce(min);
-      double range = maxVal - minVal;
-      
-      if (range == 0) return features;
-      
-      return features.map((f) => (f - minVal) / range).toList();
-    }
-    
-    // Robust normalization using IQR
-    return features.map((f) {
-      double normalized = (f - q25) / iqr;
-      return normalized.clamp(0.0, 1.0); // Clamp to 0-1 range
-    }).toList();
-  }
+  
   
   // Calculate similarity between two face feature vectors with improved robustness
   static double calculateSimilarity(List<double> features1, List<double> features2) {
     if (features1.length != features2.length) return 0.0;
     
-    // Use a combination of cosine similarity and Euclidean distance for better robustness
+    // For 128D embeddings, use cosine similarity (more appropriate for normalized embeddings)
+    if (features1.length == FaceRecognitionConfig.embeddingSize) {
+      return RealFaceRecognitionService.calculateBiometricSimilarity(features1, features2);
+    }
+    
+    // For legacy features, use the old method
     double cosineSimilarity = _calculateCosineSimilarity(features1, features2);
     double euclideanSimilarity = _calculateEuclideanSimilarity(features1, features2);
     
@@ -194,6 +120,69 @@ class FaceRecognitionService {
     // Use a scaling factor to make it more sensitive to small differences
     return 1.0 / (1.0 + euclideanDistance * 2.0);
   }
+
+  /// Additional security verification: Check face characteristics
+  static bool _verifyFaceCharacteristics(List<double> detected, List<double> stored) {
+    if (detected.length != stored.length) return false;
+    
+    // Check for significant differences in key facial features
+    // Compare first 32 dimensions (geometry features)
+    double geometryDifference = 0.0;
+    for (int i = 0; i < 32 && i < detected.length && i < stored.length; i++) {
+      geometryDifference += (detected[i] - stored[i]).abs();
+    }
+    geometryDifference /= 32.0;
+    
+    // If geometry difference is too high, it's likely a different person (made more lenient)
+    if (geometryDifference > 0.5) {
+      print('❌ Face characteristics verification failed: geometry difference too high ($geometryDifference)');
+      return false;
+    }
+    
+    // Check for pattern consistency in texture features (dimensions 32-64)
+    double textureConsistency = 0.0;
+    for (int i = 32; i < 64 && i < detected.length && i < stored.length; i++) {
+      textureConsistency += (detected[i] - stored[i]).abs();
+    }
+    textureConsistency /= 32.0;
+    
+    if (textureConsistency > 0.6) {
+      print('❌ Face characteristics verification failed: texture consistency too low ($textureConsistency)');
+      return false;
+    }
+    
+    print('✅ Face characteristics verification passed');
+    return true;
+  }
+
+  /// Additional security verification: Check embedding uniqueness
+  static bool _verifyEmbeddingUniqueness(List<double> detected, List<double> stored) {
+    if (detected.length != stored.length) return false;
+    
+    // Calculate multiple similarity metrics
+    final cosineSim = _calculateCosineSimilarity(detected, stored);
+    final euclideanSim = _calculateEuclideanSimilarity(detected, stored);
+    
+    // Very lenient thresholds for better usability (made even more lenient)
+    if (cosineSim < 0.60 || euclideanSim < 0.15) {
+      print('❌ Embedding uniqueness verification failed: cosine=$cosineSim, euclidean=$euclideanSim');
+      return false;
+    }
+    
+    // Check for consistent patterns across different feature groups
+    final geometrySim = _calculateCosineSimilarity(
+      detected.take(32).toList(),
+      stored.take(32).toList(),
+    );
+    
+    if (geometrySim < 0.50) {
+      print('❌ Embedding uniqueness verification failed: geometry similarity too low ($geometrySim)');
+      return false;
+    }
+    
+    print('✅ Embedding uniqueness verification passed');
+    return true;
+  }
   
   // Store face features for a user
   static Future<void> storeFaceFeatures(String userId, List<double> features) async {
@@ -202,8 +191,17 @@ class FaceRecognitionService {
       print('📊 FaceRecognitionService: Features: ${features.length} dimensions');
       print('📊 FaceRecognitionService: Sample features: ${features.take(5).toList()}');
       
+      // Store features in the new format for better compatibility
+      final faceData = {
+        'featureVector': features,
+        'featureCount': features.length,
+        'embeddingType': features.length == FaceRecognitionConfig.embeddingSize ? '128D' : '22D',
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+      
       await _firestore.collection('users').doc(userId).update({
-        'faceFeatures': features,
+        'faceFeatures': faceData,
         'faceFeaturesUpdatedAt': FieldValue.serverTimestamp(),
       });
       
@@ -219,7 +217,7 @@ class FaceRecognitionService {
   // - String: User ID if successful
   // - "LIVENESS_FAILED": If liveness detection fails
   // - null: If no matching user found
-  static Future<String?> findUserByFace(Face detectedFace) async {
+  static Future<String?> findUserByFace(Face detectedFace, [CameraImage? cameraImage]) async {
     try {
       print('🚨 SECURE FACE RECOGNITION STARTING...');
       print('🚨 This is the NEW secure face recognition system!');
@@ -232,20 +230,28 @@ class FaceRecognitionService {
       }
       print('✅ Liveness detection passed!');
       
-      // Extract features from the detected face
-      final detectedFeatures = extractFaceFeatures(detectedFace);
+      // Extract features from the detected face (now supports 128D embeddings)
+      final detectedFeatures = await extractFaceFeatures(detectedFace, cameraImage);
       print('Extracted ${detectedFeatures.length} features from detected face');
       
-      // Get all users with face features
+      // Get all users (we'll filter face features and verification status in code)
       final usersSnapshot = await _firestore
           .collection('users')
-          .where('faceFeatures', isNull: false)
           .get();
       
-      print('Found ${usersSnapshot.docs.length} users with stored face features');
+      // Filter for verified users with face features
+      final verifiedUsers = usersSnapshot.docs.where((doc) {
+        final userData = doc.data();
+        return userData['verificationStatus'] == 'verified' && 
+               userData['faceFeatures'] != null;
+      }).toList();
+      
+      print('🔍 SCANNING ALL VERIFIED ACCOUNTS...');
+      print('📊 Found ${verifiedUsers.length} verified users with stored face features');
+      print('🎯 Will check each account until exact match is found...');
       
       // Debug: Log details about stored face features
-      for (final doc in usersSnapshot.docs) {
+      for (final doc in verifiedUsers) {
         final userData = doc.data();
         final faceFeatures = userData['faceFeatures'];
         print('User ${doc.id}:');
@@ -258,18 +264,33 @@ class FaceRecognitionService {
         }
       }
       
-      if (usersSnapshot.docs.isEmpty) {
-        print('No users with face features found');
+      if (verifiedUsers.isEmpty) {
+        print('No verified users with face features found');
         return null;
       }
       
       String? bestMatchUserId;
       double bestSimilarity = 0.0;
-      const double similarityThreshold = FaceRecognitionConfig.similarityThreshold;
+      double bestConfidence = 0.0;
+      Map<String, dynamic> bestMatchDetails = {};
       
-      // Compare with each user's stored features
-      for (final doc in usersSnapshot.docs) {
+      print('🔄 Starting account-by-account comparison...');
+      print('📋 Account list:');
+      for (int i = 0; i < verifiedUsers.length; i++) {
+        final doc = verifiedUsers[i];
         final userData = doc.data();
+        final email = userData['email'] ?? 'Unknown';
+        print('  ${i + 1}. ${doc.id} (${email})');
+      }
+      print('');
+      
+      // Compare with each user's stored features (scan all accounts)
+      for (int i = 0; i < verifiedUsers.length; i++) {
+        final doc = verifiedUsers[i];
+        final userData = doc.data();
+        final email = userData['email'] ?? 'Unknown';
+        
+        print('🔍 Checking account ${i + 1}/${verifiedUsers.length}: ${doc.id} (${email})');
         final faceFeaturesData = userData['faceFeatures'];
         
         // Handle different face features formats
@@ -290,41 +311,66 @@ class FaceRecognitionService {
         
         if (storedFeatures.isNotEmpty) {
           final similarity = calculateSimilarity(detectedFeatures, storedFeatures);
-          print('🔍 Similarity with user ${doc.id}: $similarity');
-          print('🔍 Detected features: ${detectedFeatures.take(5).toList()}');
-          print('🔍 Stored features: ${storedFeatures.take(5).toList()}');
+          print('  📊 Similarity score: $similarity');
+          print('  🔍 Detected features: ${detectedFeatures.take(5).toList()}');
+          print('  🔍 Stored features: ${storedFeatures.take(5).toList()}');
           
-          if (similarity > bestSimilarity && similarity >= similarityThreshold) {
-            bestSimilarity = similarity;
+          // Multi-layer verification system
+          final verificationResult = _performMultiLayerVerification(
+            detectedFeatures, 
+            storedFeatures, 
+            doc.id
+          );
+          
+          print('  📊 Verification result for ${doc.id}:');
+          print('    - Similarity: ${verificationResult['similarity']}');
+          print('    - Confidence: ${verificationResult['confidence']}');
+          print('    - Security Level: ${verificationResult['securityLevel']}');
+          print('    - Is Match: ${verificationResult['isMatch']}');
+          
+          // Update best match if this is better
+          if (verificationResult['isMatch'] && 
+              verificationResult['confidence'] > bestConfidence) {
             bestMatchUserId = doc.id;
-            print('✅ High confidence match: user $bestMatchUserId with similarity $bestSimilarity');
-            
-            // Additional security check - reject if not high enough
-            if (similarity < similarityThreshold) {
-              print('⚠️ Similarity too low for login: $similarity (required: $similarityThreshold)');
-              bestMatchUserId = null; // Reject the match
-              bestSimilarity = 0.0; // Reset
-            }
+            bestSimilarity = verificationResult['similarity'];
+            bestConfidence = verificationResult['confidence'];
+            bestMatchDetails = verificationResult;
+            print('🎯 NEW BEST MATCH: ${doc.id} (confidence: ${verificationResult['confidence']})');
           }
         } else {
           print('User ${doc.id} has no valid face features');
         }
       }
       
+      print('🏁 SCAN COMPLETE - Analyzing results...');
+      
       if (bestMatchUserId != null) {
-        print('✅ Best match found: $bestMatchUserId with similarity: $bestSimilarity');
-        print('✅ Similarity threshold: $similarityThreshold');
+        print('🎯 EXACT USER FOUND!');
+        print('✅ User ID: $bestMatchUserId');
+        print('✅ Similarity: $bestSimilarity');
+        print('✅ Confidence: $bestConfidence');
+        print('✅ Security Level: ${bestMatchDetails['securityLevel']}');
+        print('✅ This user matches your face exactly!');
         
         // Update last login time
         await _firestore.collection('users').doc(bestMatchUserId).update({
           'lastLoginAt': FieldValue.serverTimestamp(),
           'lastFaceLoginSimilarity': bestSimilarity,
+          'lastFaceLoginConfidence': bestConfidence,
         });
         
         return bestMatchUserId;
       } else {
-        print('❌ No user found with sufficient similarity (threshold: $similarityThreshold)');
+        print('❌ NO EXACT MATCH FOUND');
+        print('❌ Scanned all ${verifiedUsers.length} verified accounts');
         print('❌ Best similarity found: $bestSimilarity');
+        print('❌ Best confidence found: $bestConfidence');
+        print('❌ Your face does not match any registered user');
+        print('🔍 DEBUGGING INFO:');
+        print('  - Primary threshold: ${FaceRecognitionConfig.primarySimilarityThreshold}');
+        print('  - Confidence threshold: ${FaceRecognitionConfig.confidenceThreshold}');
+        print('  - Detected features length: ${detectedFeatures.length}');
+        print('  - Sample detected features: ${detectedFeatures.take(5).toList()}');
         return null;
       }
     } catch (e) {
@@ -355,25 +401,24 @@ class FaceRecognitionService {
     }
   }
 
-  // Simple liveness detection based on face movement (blinking)
+  // Simple liveness detection (very lenient - no positioning requirements)
   static bool _verifyLiveness(Face face) {
     try {
-      print('🔍 Performing simple liveness detection (blink check)...');
+      print('🔍 Performing simple liveness detection (very lenient)...');
       
-      // Check if eyes are open (basic liveness check)
+      // Check if eyes are open (very basic liveness check)
       final leftEyeOpen = face.leftEyeOpenProbability ?? 0.0;
       final rightEyeOpen = face.rightEyeOpenProbability ?? 0.0;
       
       print('👁️ Eye probabilities - Left: $leftEyeOpen, Right: $rightEyeOpen');
       
-      // Both eyes must be open for basic liveness
-      if (leftEyeOpen < FaceRecognitionConfig.minEyeOpenProbability || 
-          rightEyeOpen < FaceRecognitionConfig.minEyeOpenProbability) {
-        print('❌ Liveness check failed: eyes not open enough (required: ${FaceRecognitionConfig.minEyeOpenProbability})');
+      // Very lenient eye open requirement (almost always passes)
+      if (leftEyeOpen < 0.1 || rightEyeOpen < 0.1) {
+        print('❌ Liveness check failed: eyes not open enough');
         return false;
       }
       
-      print('✅ Liveness detection passed - eyes are open (basic liveness confirmed)');
+      print('✅ Liveness detection passed - eyes are open');
       return true;
     } catch (e) {
       print('❌ Liveness detection error: $e');
@@ -457,5 +502,81 @@ class FaceRecognitionService {
   static void resetBlinkSequence() {
     _blinkSequence.clear();
     print('🔄 Blink sequence reset for new login attempt');
+  }
+
+  /// Multi-layer verification system that combines multiple security checks
+  static Map<String, dynamic> _performMultiLayerVerification(
+    List<double> detectedFeatures, 
+    List<double> storedFeatures, 
+    String userId
+  ) {
+    final similarity = calculateSimilarity(detectedFeatures, storedFeatures);
+    
+    // Layer 1: Basic similarity check
+    final basicSimilarityPass = similarity >= FaceRecognitionConfig.primarySimilarityThreshold;
+    
+    // Layer 2: Face characteristics verification
+    final characteristicsPass = _verifyFaceCharacteristics(detectedFeatures, storedFeatures);
+    
+    // Layer 3: Embedding uniqueness verification
+    final uniquenessPass = _verifyEmbeddingUniqueness(detectedFeatures, storedFeatures);
+    
+    // Layer 4: Friend rejection check (reject if similarity is in friend range)
+    final friendRejectionPass = !(similarity >= FaceRecognitionConfig.friendRejectionThreshold 
+      && similarity <= FaceRecognitionConfig.friendRejectionUpper);
+    
+    // Layer 5: Confidence calculation based on multiple factors
+    double confidence = 0.0;
+    String securityLevel = 'LOW';
+    
+    // Calculate confidence based on all layers
+    if (basicSimilarityPass) confidence += 0.3;
+    if (characteristicsPass) confidence += 0.25;
+    if (uniquenessPass) confidence += 0.25;
+    if (friendRejectionPass) confidence += 0.2;
+    
+    // Determine security level
+    if (confidence >= 0.9) {
+      securityLevel = 'MAXIMUM';
+    } else if (confidence >= 0.8) {
+      securityLevel = 'HIGH';
+    } else if (confidence >= 0.7) {
+      securityLevel = 'MEDIUM';
+    } else {
+      securityLevel = 'LOW';
+    }
+    
+    // Additional check: For very high confidence (1.0), require much higher similarity to distinguish exact matches
+    final highConfidenceThreshold = confidence >= 0.95 ? 0.945 : FaceRecognitionConfig.primarySimilarityThreshold;
+    final highConfidencePass = similarity >= highConfidenceThreshold;
+    
+    // Final decision: Must pass all critical layers AND have high confidence AND pass high confidence check
+    final isMatch = basicSimilarityPass && 
+                   characteristicsPass && 
+                   uniquenessPass && 
+                   friendRejectionPass && 
+                   highConfidencePass &&
+                   confidence >= FaceRecognitionConfig.confidenceThreshold;
+    
+    print('    🔍 Multi-layer analysis:');
+    print('      - Basic similarity: $basicSimilarityPass ($similarity)');
+    print('      - Characteristics: $characteristicsPass');
+    print('      - Uniqueness: $uniquenessPass');
+    print('      - Friend rejection: $friendRejectionPass');
+    print('      - High confidence check: $highConfidencePass (threshold: $highConfidenceThreshold)');
+    print('      - Final confidence: $confidence');
+    print('      - Security level: $securityLevel');
+    print('      - Is match: $isMatch');
+    
+    return {
+      'similarity': similarity,
+      'confidence': confidence,
+      'securityLevel': securityLevel,
+      'isMatch': isMatch,
+      'basicSimilarityPass': basicSimilarityPass,
+      'characteristicsPass': characteristicsPass,
+      'uniquenessPass': uniquenessPass,
+      'friendRejectionPass': friendRejectionPass,
+    };
   }
 }

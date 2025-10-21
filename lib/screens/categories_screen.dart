@@ -16,12 +16,12 @@ class CategoriesScreen extends StatefulWidget {
 class _CategoriesScreenState extends State<CategoriesScreen> {
 
   final List<Map<String, String>> categories = [
-    {"title": "ACCESSORIES", "image": "assets/logo.png"},
-    {"title": "ELECTRONICS", "image": "assets/logo.png"},
-    {"title": "FURNITURE", "image": "assets/logo.png"},
-    {"title": "MEN'S WEAR", "image": "assets/logo.png"},
-    {"title": "WOMEN'S WEAR", "image": "assets/logo.png"},
-    {"title": "VEHICLE", "image": "assets/logo.png"},
+    {"title": "ACCESSORIES", "image": "assets/accessories.jpg"},
+    {"title": "ELECTRONICS", "image": "assets/electronics.jpg"},
+    {"title": "FURNITURE", "image": "assets/furniture.jpg"},
+    {"title": "MEN'S WEAR", "image": "assets/mens wear.jpg"},
+    {"title": "WOMEN'S WEAR", "image": "assets/womens wear.jpg"},
+    {"title": "VEHICLE", "image": "assets/vehicle.jpg"},
   ];
 
   @override
@@ -55,14 +55,12 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
             ),
 
             // 📌 Banner
-            Container(
-              width: double.infinity,
-              height: 120,
-              decoration: const BoxDecoration(
-                image: DecorationImage(
-                  image: AssetImage("assets/logo.png"),
-                  fit: BoxFit.cover,
-                ),
+            ClipRRect(
+              child: Image.asset(
+                "assets/msbanner.jpg",
+                width: double.infinity,
+                height: 200,
+                fit: BoxFit.cover,
               ),
             ),
 

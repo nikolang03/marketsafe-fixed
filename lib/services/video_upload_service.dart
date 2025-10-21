@@ -1,16 +1,19 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:path/path.dart' as path;
 import 'package:video_thumbnail/video_thumbnail.dart';
+import 'watermarking_service.dart';
 
 class VideoUploadService {
   static final FirebaseStorage _storage = FirebaseStorage.instance;
 
-  /// Upload video to Firebase Storage and generate thumbnail
+  /// Upload video to Firebase Storage and generate thumbnail with watermarking
   static Future<Map<String, String>> uploadVideoWithThumbnail({
     required String videoPath,
     required String userId,
     required String productId,
+    String? username,
   }) async {
     try {
       print('🎥 Starting video upload process...');
@@ -54,19 +57,57 @@ class VideoUploadService {
 
       print('✅ Thumbnail generated: $thumbnailPath');
 
-      // Upload thumbnail
-      print('📤 Uploading thumbnail...');
+      // Validate thumbnail authenticity and add watermark
+      Uint8List thumbnailBytes;
+      final fileBytes = await File(thumbnailPath).readAsBytes();
+      
+      // Check if thumbnail is from internet (shouldn't happen for video thumbnails, but safety check)
+      final isFromInternet = await WatermarkingService.isImageFromInternet(fileBytes);
+      if (isFromInternet) {
+        print('⚠️ Video thumbnail appears to be from internet - this is unusual for video thumbnails');
+      }
+      
+      if (username != null) {
+        print('🎨 Adding watermark and metadata to video thumbnail for user: $username');
+        thumbnailBytes = await WatermarkingService.addWatermarkToImage(
+          imageBytes: fileBytes,
+          username: username,
+          userId: userId,
+          customText: '@$username',
+          customPosition: WatermarkPosition.center,
+          customSize: 0.8,
+          customOpacity: 0.9,
+          customColor: WatermarkColor.yellow,
+        );
+        print('✅ Watermark and metadata added to thumbnail successfully');
+      } else {
+        thumbnailBytes = fileBytes;
+        print('⚠️ No username provided, uploading thumbnail without watermark');
+      }
+
+      // Upload watermarked thumbnail
+      print('📤 Uploading watermarked thumbnail...');
       final thumbnailRef = _storage
           .ref()
           .child('product_videos')
           .child(userId)
           .child(thumbnailFileName);
 
-      final thumbnailUploadTask = thumbnailRef.putFile(File(thumbnailPath));
+      final metadata = SettableMetadata(
+        contentType: 'image/jpeg',
+        customMetadata: {
+          'productId': productId,
+          'uploadedAt': DateTime.now().toIso8601String(),
+          'watermarked': username != null ? 'true' : 'false',
+          'username': username ?? 'unknown',
+        },
+      );
+
+      final thumbnailUploadTask = thumbnailRef.putData(thumbnailBytes, metadata);
       final thumbnailSnapshot = await thumbnailUploadTask;
       final thumbnailUrl = await thumbnailSnapshot.ref.getDownloadURL();
 
-      print('✅ Thumbnail uploaded successfully: $thumbnailUrl');
+      print('✅ Watermarked thumbnail uploaded successfully: $thumbnailUrl');
 
       // Clean up temporary thumbnail file
       try {
