@@ -56,6 +56,7 @@ class FaceUniquenessService {
       
       if (existingUserId != null) {
         print('❌ Face already registered with user: $existingUserId');
+        print('❌ This face matches an existing user in the system');
         return true;
       }
       
@@ -68,10 +69,13 @@ class FaceUniquenessService {
       }
       
       print('✅ Face is unique, allowing registration');
+      print('✅ No matching faces found in the system');
       return false;
     } catch (e) {
       print('❌ Error checking face uniqueness: $e');
+      print('❌ Error details: ${e.toString()}');
       // Allow registration if check fails - don't block the user
+      print('✅ Allowing registration due to error (fail-safe)');
       return false;
     }
   }
@@ -95,9 +99,9 @@ class FaceUniquenessService {
         if (storedMetrics != null) {
           final similarity = _compareFaceFeatures(faceMetrics, storedMetrics);
           print('Face similarity: $similarity');
-          if (similarity > 0.95) {  // Changed from 0.8 to 0.95 (95% similarity)
-            // 95% similarity threshold - much more restrictive
-            print('Face already registered with high similarity: $similarity');
+          if (similarity > 0.98) {  // Very high threshold (98% similarity) to prevent false positives
+            // 98% similarity threshold - extremely restrictive to prevent false positives
+            print('Face already registered with very high similarity: $similarity');
             return true;
           }
         }

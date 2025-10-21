@@ -214,8 +214,8 @@ class _SimpleProfilePhotoScreenState extends State<SimpleProfilePhotoScreen> {
         };
       }
 
-      // Calculate real biometric similarity
-      final similarity = RealFaceRecognitionService.calculateBiometricSimilarity(
+      // Calculate real biometric similarity using lenient profile photo method
+      final similarity = RealFaceRecognitionService.calculateProfilePhotoSimilarity(
         detectedFeatures, 
         storedFeatures,
       );
@@ -236,7 +236,7 @@ class _SimpleProfilePhotoScreenState extends State<SimpleProfilePhotoScreen> {
       } else {
         return {
           'success': false,
-          'error': 'Face verification failed. The uploaded photo doesn\'t match your registered face. (Similarity: ${(similarity * 100).toStringAsFixed(1)}%)',
+          'error': 'Face verification failed. The uploaded photo doesn\'t match your registered face. (Similarity: ${(similarity * 100).toStringAsFixed(1)}% - Required: 60%)',
           'similarity': similarity,
         };
       }

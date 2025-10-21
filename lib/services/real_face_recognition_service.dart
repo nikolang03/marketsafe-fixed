@@ -14,7 +14,7 @@ class RealFaceRecognitionService {
       );
 
   // Real face recognition configuration
-  static const double _similarityThreshold = 0.8; // High threshold for security but allows your face
+  static const double _similarityThreshold = 0.9; // Very high threshold to prevent false positives during signup
 
   /// Extract real biometric features from a face
   /// This creates a unique biometric signature based on actual facial features
@@ -241,27 +241,36 @@ class RealFaceRecognitionService {
   static double calculateBiometricSimilarity(List<double> signature1, List<double> signature2) {
     if (signature1.length != signature2.length) return 0.0;
     
-    // Calculate very strict similarity for security
-    double sumSimilarity = 0.0;
-    for (int i = 0; i < signature1.length; i++) {
-      double diff = (signature1[i] - signature2[i]).abs();
-      // Very strict: only tiny differences get high similarity
-      double similarity = 1.0 - (diff / 0.05).clamp(0.0, 1.0);
-      sumSimilarity += similarity;
-    }
-    
-    double strictSimilarity = sumSimilarity / signature1.length;
-    
-    // Also calculate cosine similarity
+    // Use a more balanced approach that combines multiple similarity metrics
+    double euclideanSimilarity = _calculateEuclideanSimilarity(signature1, signature2);
     double cosineSimilarity = _calculateCosineSimilarity(signature1, signature2);
     
-    // Use the strict similarity for better accuracy with biometric features
-    final finalSimilarity = strictSimilarity;
+    // Calculate weighted average with more emphasis on cosine similarity for biometric data
+    final finalSimilarity = (euclideanSimilarity * 0.3) + (cosineSimilarity * 0.7);
     
     print('📊 Biometric similarity calculation:');
-    print('  - Strict similarity: $strictSimilarity');
+    print('  - Euclidean similarity: $euclideanSimilarity');
     print('  - Cosine similarity: $cosineSimilarity');
-    print('  - Final similarity (STRICT): $finalSimilarity');
+    print('  - Final similarity (BALANCED): $finalSimilarity');
+    
+    return finalSimilarity;
+  }
+
+  /// Calculate similarity for profile photos with more lenient settings
+  static double calculateProfilePhotoSimilarity(List<double> signature1, List<double> signature2) {
+    if (signature1.length != signature2.length) return 0.0;
+    
+    // Use a more lenient approach for profile photos
+    double euclideanSimilarity = _calculateEuclideanSimilarity(signature1, signature2);
+    double cosineSimilarity = _calculateCosineSimilarity(signature1, signature2);
+    
+    // More lenient weighting for profile photos
+    final finalSimilarity = (euclideanSimilarity * 0.4) + (cosineSimilarity * 0.6);
+    
+    print('📊 Profile photo similarity calculation:');
+    print('  - Euclidean similarity: $euclideanSimilarity');
+    print('  - Cosine similarity: $cosineSimilarity');
+    print('  - Final similarity (LENIENT): $finalSimilarity');
     
     return finalSimilarity;
   }
@@ -294,9 +303,9 @@ class RealFaceRecognitionService {
     
     double euclideanDistance = sqrt(sumSquaredDiffs);
     
-    // Convert distance to similarity (0-1 range) - much more lenient for small differences
-    // For very similar values, this should give high similarity
-    return 1.0 / (1.0 + euclideanDistance * 0.1);
+    // Convert distance to similarity (0-1 range) - more lenient for biometric data
+    // Use a higher scaling factor to be more forgiving of small differences
+    return 1.0 / (1.0 + euclideanDistance * 0.5);
   }
 
   /// Store real biometric features for a user

@@ -178,11 +178,11 @@ class ProfilePhotoVerificationService {
         );
       }
 
-      // Use a strict threshold for profile photos (security is important)
-      const double verificationThreshold = 0.7; // 70% similarity required (strict)
+      // Use a balanced threshold for profile photos (security vs usability)
+      const double verificationThreshold = 0.6; // 60% similarity required (balanced)
       
-      // Calculate similarity
-      final similarity = RealFaceRecognitionService.calculateBiometricSimilarity(
+      // Calculate similarity using lenient profile photo method
+      final similarity = RealFaceRecognitionService.calculateProfilePhotoSimilarity(
         detectedFeatures, 
         storedFeatures,
       );
@@ -205,7 +205,7 @@ class ProfilePhotoVerificationService {
       } else {
         return ProfilePhotoVerificationResult(
           success: false,
-          error: 'The uploaded photo doesn\'t match to the face verification',
+          error: 'Face verification failed. The uploaded photo doesn\'t match your registered face. (Similarity: ${(similarity * 100).toStringAsFixed(1)}% - Required: 60%)',
           similarity: similarity,
         );
       }
