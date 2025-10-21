@@ -9,7 +9,6 @@ import 'package:permission_handler/permission_handler.dart';
 import '../services/face_login_service.dart';
 import '../services/lockout_service.dart';
 import 'signup_screen.dart';
-import 'under_verification_screen.dart';
 import 'welcome_screen.dart';
 import '../navigation_wrapper.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -508,29 +507,20 @@ Future<void> _processImageFromFile() async {
           _showLivenessDetectionDialog();
         }
       } else if (userId != null) {
-        // Check if user needs verification
-        if (userId.startsWith('PENDING_VERIFICATION:')) {
+        // Check if user is rejected
+        if (userId.startsWith('REJECTED_USER:')) {
           final actualUserId = userId.split(':')[1];
-          print('User needs verification: $actualUserId');
+          print('User was rejected: $actualUserId');
 
           if (mounted) {
             setState(() {
-              _progressPercentage = 100.0;
+              _progressPercentage = 0.0;
+              _isAuthenticating = false;
             });
-
-            // Navigate to verification screen
-            Future.delayed(const Duration(milliseconds: 1000), () {
-              if (mounted) {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const UnderVerificationScreen()),
-                );
-              }
-            });
+            _showRejectedUserDialog();
           }
         } else {
-          // User is verified, get user data and sign in
+          // User is verified or pending, get user data and sign in
           final userData = await FaceLoginService.getUserData(userId);
 
           if (userData != null) {
@@ -688,6 +678,74 @@ Future<void> _processImageFromFile() async {
               child: const Text(
                 "Sign Up Instead",
                 style: TextStyle(color: Colors.grey),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showRejectedUserDialog() {
+    setState(() {
+      _isDialogShowing = true;
+    });
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(
+                Icons.block,
+                color: Colors.red,
+                size: 28,
+              ),
+              SizedBox(width: 8),
+              Text(
+                "Account Rejected",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.red,
+                ),
+              ),
+            ],
+          ),
+          content: const Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "Your account has been rejected and cannot access the system.",
+                style: TextStyle(fontSize: 16),
+              ),
+              SizedBox(height: 12),
+              Text(
+                "Please contact support if you believe this is an error.",
+                style: TextStyle(fontSize: 14, color: Colors.grey),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop(); // Close dialog
+                setState(() {
+                  _isDialogShowing = false;
+                });
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (_) => const WelcomeScreen()),
+                );
+              },
+              child: const Text(
+                "OK",
+                style: TextStyle(
+                  color: Colors.red,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ],

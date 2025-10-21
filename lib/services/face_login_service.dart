@@ -64,8 +64,10 @@ class FaceLoginService {
         final userDoc = await _firestore.collection('users').doc(result).get();
         final verificationStatus = userDoc.data()?['verificationStatus'] ?? 'pending';
         
-        if (verificationStatus != 'verified') {
-          return 'PENDING_VERIFICATION:$result';
+        // Allow login for both verified and pending users
+        // Only block rejected users
+        if (verificationStatus == 'rejected') {
+          return 'REJECTED_USER:$result';
         }
         
         // Update last login time
