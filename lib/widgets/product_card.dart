@@ -3,7 +3,10 @@ import 'package:video_player/video_player.dart';
 import '../models/product_model.dart';
 import '../screens/edit_product_screen.dart';
 import '../screens/product_preview_screen.dart';
+import '../screens/user_profile_view_screen.dart';
+import '../screens/comments_screen.dart';
 import '../services/product_service.dart';
+import '../services/follow_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'image_swiper.dart';
 
@@ -29,6 +32,8 @@ class _ProductCardState extends State<ProductCard> {
   late Product _currentProduct;
   String? _currentUserId;
   bool _isLiking = false;
+  bool _isFollowing = false;
+  bool _isFollowLoading = false;
 
   @override
   void initState() {
@@ -37,6 +42,7 @@ class _ProductCardState extends State<ProductCard> {
     _getCurrentUserId();
     _debugSharedPreferences();
     _debugProductInfo();
+    _checkFollowStatus();
   }
 
   // Debug method to check product info on widget init
@@ -131,6 +137,108 @@ class _ProductCardState extends State<ProductCard> {
     
     print('  - Final username: Anonymous (fallback)');
     return 'Anonymous';
+  }
+
+  // Follow functionality methods
+  Future<void> _checkFollowStatus() async {
+    if (_currentUserId == null || _currentUserId == _currentProduct.sellerId) return;
+    
+    try {
+      final isFollowing = await FollowService.isFollowing(_currentProduct.sellerId);
+      if (mounted) {
+        setState(() {
+          _isFollowing = isFollowing;
+        });
+      }
+    } catch (e) {
+      print('❌ Error checking follow status: $e');
+    }
+  }
+
+  Future<void> _toggleFollow() async {
+    if (_isFollowLoading || _currentUserId == null || _currentUserId == _currentProduct.sellerId) return;
+
+    setState(() {
+      _isFollowLoading = true;
+    });
+
+    try {
+      bool success;
+      if (_isFollowing) {
+        success = await FollowService.unfollowUser(_currentProduct.sellerId);
+        if (success) {
+          setState(() {
+            _isFollowing = false;
+          });
+          _showSuccessSnackBar('Unfollowed ${_currentProduct.sellerName}');
+        }
+      } else {
+        success = await FollowService.followUser(_currentProduct.sellerId);
+        if (success) {
+          setState(() {
+            _isFollowing = true;
+          });
+          _showSuccessSnackBar('Following ${_currentProduct.sellerName}');
+        }
+      }
+
+      if (!success) {
+        _showErrorSnackBar('Failed to ${_isFollowing ? 'unfollow' : 'follow'} user');
+      }
+    } catch (e) {
+      print('❌ Error toggling follow: $e');
+      _showErrorSnackBar('An error occurred');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isFollowLoading = false;
+        });
+      }
+    }
+  }
+
+  void _navigateToUserProfile() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => UserProfileViewScreen(
+          targetUserId: _currentProduct.sellerId,
+          targetUsername: _currentProduct.sellerName,
+        ),
+      ),
+    );
+  }
+
+  void _navigateToComments() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CommentsScreen(
+          productId: _currentProduct.id,
+          productTitle: _currentProduct.title,
+        ),
+      ),
+    );
+  }
+
+  void _showSuccessSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   Future<String> _getCurrentUserProfilePicture() async {
@@ -551,51 +659,57 @@ class _ProductCardState extends State<ProductCard> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               ListTile(
-                leading: CircleAvatar(
-                  radius: 20,
-                  backgroundColor: Colors.white24,
-                  backgroundImage: (_currentProduct.sellerProfilePictureUrl != null && 
-                                  _currentProduct.sellerProfilePictureUrl!.isNotEmpty)
-                      ? NetworkImage(_currentProduct.sellerProfilePictureUrl!)
-                      : null,
-                  child: (_currentProduct.sellerProfilePictureUrl == null || 
-                         _currentProduct.sellerProfilePictureUrl!.isEmpty)
-                      ? Text(
-                          _currentProduct.sellerName.isNotEmpty 
-                              ? _currentProduct.sellerName[0].toUpperCase()
-                              : 'U',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        )
-                      : null,
+                leading: GestureDetector(
+                  onTap: isOwner ? null : _navigateToUserProfile,
+                  child: CircleAvatar(
+                    radius: 20,
+                    backgroundColor: Colors.white24,
+                    backgroundImage: (_currentProduct.sellerProfilePictureUrl != null && 
+                                    _currentProduct.sellerProfilePictureUrl!.isNotEmpty)
+                        ? NetworkImage(_currentProduct.sellerProfilePictureUrl!)
+                        : null,
+                    child: (_currentProduct.sellerProfilePictureUrl == null || 
+                           _currentProduct.sellerProfilePictureUrl!.isEmpty)
+                        ? Text(
+                            _currentProduct.sellerName.isNotEmpty 
+                                ? _currentProduct.sellerName[0].toUpperCase()
+                                : 'U',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          )
+                        : null,
+                  ),
                 ),
-                title: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      _currentProduct.sellerName.isNotEmpty 
-                          ? _currentProduct.sellerName 
-                          : 'Unknown Seller',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 16,
-                      ),
-                    ),
-                    if (_currentProduct.sellerUsername != null && _currentProduct.sellerUsername!.isNotEmpty)
+                title: GestureDetector(
+                  onTap: isOwner ? null : _navigateToUserProfile,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
                       Text(
-                        '@${_currentProduct.sellerUsername}',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.7),
-                          fontSize: 12,
-                          fontWeight: FontWeight.normal,
+                        _currentProduct.sellerName.isNotEmpty 
+                            ? _currentProduct.sellerName 
+                            : 'Unknown Seller',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 16,
                         ),
                       ),
-                  ],
+                      if (_currentProduct.sellerUsername != null && _currentProduct.sellerUsername!.isNotEmpty)
+                        Text(
+                          '@${_currentProduct.sellerUsername}',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.7),
+                            fontSize: 12,
+                            fontWeight: FontWeight.normal,
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -609,15 +723,32 @@ class _ProductCardState extends State<ProductCard> {
                         onPressed: () => _showProductMenu(context, _currentProduct),
                       ),
                     ] else ...[
-                      OutlinedButton(
-                        style: OutlinedButton.styleFrom(
+                      // Follow Button
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _isFollowing ? Colors.grey[800] : Colors.red,
                           foregroundColor: Colors.white,
-                          side: const BorderSide(color: Colors.white54),
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          minimumSize: const Size(60, 30),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          minimumSize: const Size(80, 32),
                         ),
-                        onPressed: () {},
-                        child: const Text("Follow"),
+                        onPressed: _isFollowLoading ? null : _toggleFollow,
+                        child: _isFollowLoading
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : Text(_isFollowing ? 'Following' : 'Follow'),
+                      ),
+                      const SizedBox(width: 8),
+                      // Comments Button
+                      IconButton(
+                        icon: const Icon(Icons.comment_outlined, color: Colors.white),
+                        onPressed: _navigateToComments,
+                        tooltip: 'View Comments',
                       ),
                     ],
                   ],

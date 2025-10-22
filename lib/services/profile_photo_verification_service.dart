@@ -262,8 +262,8 @@ class ProfilePhotoVerificationService {
         userId: userId,
       );
       
-      if (!validationResult['isAuthentic'] && validationResult['warnings'].isNotEmpty) {
-        print('⚠️ Profile photo authenticity warnings: ${validationResult['warnings']}');
+      if (validationResult['isValid'] == false) {
+        print('⚠️ Profile photo authenticity issue: ${validationResult['reason'] ?? 'Unknown issue'}');
         // Continue with upload but log warnings
       }
       
@@ -272,11 +272,16 @@ class ProfilePhotoVerificationService {
         username: username,
         userId: userId,
         customText: '@$username',
-        customPosition: WatermarkPosition.center,
-        customSize: 0.8,
-        customOpacity: 0.9,
-        customColor: WatermarkColor.yellow,
+        customPosition: WatermarkPosition.bottomRight, // Move to corner
+        customSize: 0.15, // Much smaller (15% instead of 80%)
+        customOpacity: 0.3, // Much more transparent (30% instead of 90%)
+        customColor: WatermarkColor.white, // White instead of yellow
       );
+      
+      if (watermarkedBytes.isEmpty) {
+        throw Exception('Failed to add watermark to image');
+      }
+      
       print('✅ Watermark and metadata added to profile photo successfully');
       
       // Create unique filename with timestamp

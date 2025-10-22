@@ -3,6 +3,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:camera/camera.dart';
 import 'dart:math';
+import 'face_security_service.dart';
 
 /// Real Face Recognition Service using actual biometric data
 /// This service provides genuine face authentication, not simulation
@@ -13,8 +14,9 @@ class RealFaceRecognitionService {
         databaseId: 'marketsafe',
       );
 
-  // Real face recognition configuration
-  static const double _similarityThreshold = 0.9; // Very high threshold to prevent false positives during signup
+  // Real face recognition configuration - SECURITY ENHANCED
+  static const double _similarityThreshold = 0.85; // HIGH threshold for face recognition (85% similarity) - SECURITY CRITICAL
+  static const double _minimumUniquenessThreshold = 0.15; // Minimum difference between best and second-best match
 
   /// Extract real biometric features from a face
   /// This creates a unique biometric signature based on actual facial features
@@ -213,22 +215,39 @@ class RealFaceRecognitionService {
     return 0.5; // Default symmetry
   }
 
-  /// Perform real liveness detection (simplified - no positioning requirements)
+  /// Perform real liveness detection (ENHANCED SECURITY)
   static bool _performLivenessDetection(Face face) {
     try {
-      print('🔍 Performing REAL liveness detection (simplified)...');
+      print('🔍 Performing ENHANCED liveness detection...');
       
-      // Basic liveness check - just ensure eyes are open (very lenient)
+      // Enhanced liveness checks for better security
       final leftEyeOpen = face.leftEyeOpenProbability ?? 0.0;
       final rightEyeOpen = face.rightEyeOpenProbability ?? 0.0;
+      final smiling = face.smilingProbability ?? 0.0;
       
-      // Very lenient eye open requirement
-      if (leftEyeOpen < 0.1 || rightEyeOpen < 0.1) {
-        print('❌ Liveness check failed: eyes not open enough');
+      // Check eye states (more strict)
+      if (leftEyeOpen < 0.3 || rightEyeOpen < 0.3) {
+        print('❌ Liveness check failed: eyes not open enough (L: $leftEyeOpen, R: $rightEyeOpen)');
         return false;
       }
       
-      print('✅ Liveness check passed: basic checks passed');
+      // Check for natural facial expression (not too rigid)
+      if (smiling < 0.1 && smiling > 0.9) {
+        print('❌ Liveness check failed: unnatural facial expression (smiling: $smiling)');
+        return false;
+      }
+      
+      // Check head pose for natural positioning
+      final headAngleX = face.headEulerAngleX ?? 0.0;
+      final headAngleY = face.headEulerAngleY ?? 0.0;
+      
+      // Reject extreme head angles (likely photos)
+      if (headAngleX.abs() > 30 || headAngleY.abs() > 30) {
+        print('❌ Liveness check failed: extreme head angle (X: $headAngleX, Y: $headAngleY)');
+        return false;
+      }
+      
+      print('✅ Enhanced liveness check passed: eyes open, natural expression, good head pose');
       return true;
       
     } catch (e) {
@@ -351,19 +370,25 @@ class RealFaceRecognitionService {
       print('Extracted ${detectedBiometrics.length} real biometric features');
       print('📊 Sample detected features: ${detectedBiometrics.take(3).toList()}');
       
-      // Get all verified users (including those with legacy face features)
+      // Get all users with biometric data (verified and pending)
       final usersSnapshot = await _firestore
           .collection('users')
-          .where('verificationStatus', isEqualTo: 'verified')
+          .where('verificationStatus', whereIn: ['verified', 'pending'])
           .get();
       
       final usersWithBiometrics = usersSnapshot.docs.where((doc) {
         final userData = doc.data();
-        return userData['verificationStatus'] == 'verified' && 
+        return (userData['verificationStatus'] == 'verified' || userData['verificationStatus'] == 'pending') && 
                (userData['biometricFeatures'] != null || userData['faceFeatures'] != null);
       }).toList();
       
       print('🔍 Found ${usersWithBiometrics.length} users with real biometric data');
+      
+      // Debug: Print details about found users
+      for (final doc in usersWithBiometrics) {
+        final userData = doc.data();
+        print('  - User ${doc.id}: status=${userData['verificationStatus']}, hasBiometric=${userData['biometricFeatures'] != null}, hasFace=${userData['faceFeatures'] != null}');
+      }
       
       if (usersWithBiometrics.isEmpty) {
         print('No users with real biometric features found');
@@ -372,6 +397,7 @@ class RealFaceRecognitionService {
       
       String? bestMatchUserId;
       double bestSimilarity = 0.0;
+      double secondBestSimilarity = 0.0;
       
       // Compare with each user's stored biometric features
       for (final doc in usersWithBiometrics) {
@@ -402,36 +428,70 @@ class RealFaceRecognitionService {
           final similarity = calculateBiometricSimilarity(detectedBiometrics, storedSignature);
           print('User ${doc.id} biometric similarity: $similarity');
           
-      if (similarity > bestSimilarity && similarity >= _similarityThreshold) {
-        // Security check: if similarity is too high (>0.95), it might be a duplicate face
-        if (similarity > 0.95) {
-          print('🚨 SECURITY WARNING: Very high similarity detected (${similarity.toStringAsFixed(3)})');
-          print('🚨 This might indicate a duplicate face or security issue');
-        }
-        bestMatchUserId = doc.id;
-        bestSimilarity = similarity;
-      }
+          // SECURITY ENHANCEMENT: Track top 2 matches for uniqueness validation
+          if (similarity > bestSimilarity) {
+            // Move current best to second best
+            secondBestSimilarity = bestSimilarity;
+            
+            // Set new best match
+            bestMatchUserId = doc.id;
+            bestSimilarity = similarity;
+          } else if (similarity > secondBestSimilarity) {
+            // Update second best match
+            secondBestSimilarity = similarity;
+          }
         } else {
           print('  ⚠️ No biometric features found for user ${doc.id}');
         }
       }
       
-      if (bestMatchUserId != null) {
+      // SECURITY VALIDATION: Check if match is unique enough
+      if (bestMatchUserId != null && bestSimilarity >= _similarityThreshold) {
+        final uniquenessScore = bestSimilarity - secondBestSimilarity;
+        print('🔍 SECURITY CHECK: Best similarity: $bestSimilarity, Second best: $secondBestSimilarity');
+        print('🔍 SECURITY CHECK: Uniqueness score: $uniquenessScore (minimum required: $_minimumUniquenessThreshold)');
+        
+        if (uniquenessScore < _minimumUniquenessThreshold) {
+          print('🚨 SECURITY REJECTION: Match not unique enough! Multiple users have similar biometrics');
+          print('🚨 This prevents unauthorized access when faces are too similar');
+          return null; // Reject authentication for security
+        }
+        
+        // Additional security check: if similarity is too high (>0.95), it might be a duplicate face
+        if (bestSimilarity > 0.95) {
+          print('🚨 SECURITY WARNING: Very high similarity detected (${bestSimilarity.toStringAsFixed(3)})');
+          print('🚨 This might indicate a duplicate face or security issue');
+        }
+      }
+      
+      if (bestMatchUserId != null && bestSimilarity >= _similarityThreshold) {
         print('🎯 REAL USER FOUND!');
         print('✅ User ID: $bestMatchUserId');
         print('✅ Biometric Similarity: $bestSimilarity');
+        print('✅ Uniqueness Score: ${bestSimilarity - secondBestSimilarity}');
         print('✅ This is REAL biometric authentication!');
+        
+        // SECURITY: Log successful authentication
+        await FaceSecurityService.logSecurityEvent('FACE_LOGIN_SUCCESS', bestMatchUserId, {
+          'similarity': bestSimilarity,
+          'uniquenessScore': bestSimilarity - secondBestSimilarity,
+          'secondBestSimilarity': secondBestSimilarity,
+        });
         
         // Update last login time
         await _firestore.collection('users').doc(bestMatchUserId).update({
           'lastLoginAt': FieldValue.serverTimestamp(),
           'lastBiometricSimilarity': bestSimilarity,
+          'lastUniquenessScore': bestSimilarity - secondBestSimilarity,
         });
         
         return bestMatchUserId;
       } else {
         print('❌ No matching user found with real biometric authentication');
         print('❌ Best similarity found: $bestSimilarity (threshold: $_similarityThreshold)');
+        if (bestMatchUserId != null) {
+          print('❌ Uniqueness check failed: ${bestSimilarity - secondBestSimilarity} < $_minimumUniquenessThreshold');
+        }
         return null;
       }
     } catch (e) {

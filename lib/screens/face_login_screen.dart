@@ -10,6 +10,7 @@ import '../services/face_login_service.dart';
 import '../services/lockout_service.dart';
 import 'signup_screen.dart';
 import 'welcome_screen.dart';
+import 'under_verification_screen.dart';
 import '../navigation_wrapper.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -520,7 +521,7 @@ Future<void> _processImageFromFile() async {
             _showRejectedUserDialog();
           }
         } else {
-          // User is verified or pending, get user data and sign in
+          // User is verified or pending, get user data and check verification status
           final userData = await FaceLoginService.getUserData(userId);
 
           if (userData != null) {
@@ -533,18 +534,33 @@ Future<void> _processImageFromFile() async {
             print('✅ Stored current username: ${userData['username'] ?? 'User'}');
             print('✅ Stored current profile picture: ${userData['profilePictureUrl'] ?? 'none'}');
 
+            // Check verification status
+            final verificationStatus = userData['verificationStatus'] ?? 'pending';
+            print('📊 User verification status: $verificationStatus');
+
             if (mounted) {
               setState(() {
                 _progressPercentage = 100.0;
               });
 
-              // Navigate to main app after a short delay
+              // Navigate based on verification status
               Future.delayed(const Duration(milliseconds: 1000), () {
                 if (mounted) {
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(builder: (_) => const NavigationWrapper()),
-                  );
+                  if (verificationStatus == 'verified') {
+                    // User is verified, navigate to main app
+                    print('✅ User is verified! Navigating to main app...');
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (_) => const NavigationWrapper()),
+                    );
+                  } else {
+                    // User is pending, navigate to under verification screen
+                    print('⏳ User is pending verification! Navigating to under verification screen...');
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (_) => const UnderVerificationScreen()),
+                    );
+                  }
                 }
               });
             }

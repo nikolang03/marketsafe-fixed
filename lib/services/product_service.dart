@@ -84,20 +84,35 @@ class ProductService {
       final List<String> imageUrls = [];
       for (int i = 0; i < imageFiles.length; i++) {
         try {
+          print('📤 Starting upload for image ${i + 1}/${imageFiles.length}');
+          print('📁 Image file path: ${imageFiles[i].path}');
+          print('📁 Image file exists: ${imageFiles[i].existsSync()}');
+          print('📁 Image file size: ${await imageFiles[i].length()} bytes');
+          
           final imageUrl = await uploadProductImage(
             imageFiles[i], 
             '${productId}_$i',
             username: sellerUsername,
           );
           imageUrls.add(imageUrl);
-          print('✅ Image ${i + 1} uploaded with watermark: $imageUrl');
+          print('✅ Image ${i + 1} uploaded successfully: $imageUrl');
         } catch (e) {
-          print('⚠️ Image ${i + 1} upload failed: $e');
+          print('❌ Image ${i + 1} upload failed: $e');
+          print('❌ Error type: ${e.runtimeType}');
+          print('❌ Error details: ${e.toString()}');
           print('⚠️ Skipping failed image upload');
           // Don't add random placeholder - skip this image
           continue;
         }
       }
+
+      // Check if any images were successfully uploaded
+      if (imageUrls.isEmpty) {
+        print('❌ No images were successfully uploaded');
+        throw Exception('Failed to upload any product images. Please try again with different images.');
+      }
+
+      print('✅ Successfully uploaded ${imageUrls.length} images');
 
       // Create product object
       final product = Product(
@@ -172,10 +187,16 @@ class ProductService {
   static Future<String> uploadProductImage(File imageFile, String productId, {String? username}) async {
     try {
       print('📤 Uploading image to Firebase Storage...');
+      print('📁 Image file: ${imageFile.path}');
+      print('📁 File exists: ${imageFile.existsSync()}');
+      print('📁 File size: ${await imageFile.length()} bytes');
+      print('📁 Product ID: $productId');
+      print('📁 Username: $username');
       
       // Validate image authenticity and add watermark
       Uint8List imageBytes;
       final fileBytes = await imageFile.readAsBytes();
+      print('📁 File bytes length: ${fileBytes.length}');
       
       // Check if image is from internet
       final isFromInternet = await WatermarkingService.isImageFromInternet(fileBytes);
@@ -190,8 +211,8 @@ class ProductService {
         userId: productId.split('_').last, // Extract userId from productId
       );
       
-      if (!validationResult['isAuthentic'] && validationResult['warnings'].isNotEmpty) {
-        print('⚠️ Image authenticity warnings: ${validationResult['warnings']}');
+      if (validationResult['isValid'] == false) {
+        print('⚠️ Image authenticity issue: ${validationResult['reason'] ?? 'Unknown issue'}');
         // Continue with upload but log warnings
       }
       
@@ -201,6 +222,7 @@ class ProductService {
       print('📸 Using pre-watermarked image');
       
       final ref = _storage.ref().child('products').child('$productId.jpg');
+      print('📁 Storage reference: ${ref.fullPath}');
       
       // Set metadata to help with upload
       final metadata = SettableMetadata(
@@ -212,10 +234,14 @@ class ProductService {
           'username': username ?? 'unknown',
         },
       );
+      print('📁 Metadata set for upload');
       
       // Upload watermarked image
+      print('📤 Starting Firebase Storage upload...');
       final uploadTask = ref.putData(imageBytes, metadata);
+      print('📤 Upload task created, waiting for completion...');
       final snapshot = await uploadTask;
+      print('📤 Upload completed, getting download URL...');
       final downloadUrl = await snapshot.ref.getDownloadURL();
       
       print('✅ Image uploaded successfully: $downloadUrl');
